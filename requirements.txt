@@ -57,6 +57,8 @@ tenacity                       # Retry-with-backoff for external calls
 slowapi                        # Redis-backed API rate limiting (Limiter class)
 redis                          # Redis client for rate limiting & task queue
 celery                         # Distributed task queue for async graph runs
+prometheus-client              # Prometheus metrics exposition
+prometheus-fastapi-instrumentator  # Automatic FastAPI request metrics
 
 # --- EVALUATION (EVALS) ---
 ragas                       # RAG-specific evaluation metrics (Faithfulness, Relevancy, Recall)

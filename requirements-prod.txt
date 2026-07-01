@@ -46,6 +46,8 @@ portkey-ai==2.3.0
 langsmith==0.8.3
 logfire[fastapi,requests]==4.32.1
 loguru==0.7.3
+prometheus-client==0.25.0
+prometheus-fastapi-instrumentator==8.0.2
 
 # --- INGESTION PARSERS ---
 python-pptx==1.0.2

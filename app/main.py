@@ -11,10 +11,13 @@ logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
 
 # Now safe to import app modules - logfire is already active
 import asyncio
+import time
 import uuid
 from fastapi import FastAPI, Response, Request, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from prometheus_client import Counter, Histogram
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.agents.graph import build_graph
 from app.guardrails import initialize_rails, guard
 from app.health import router as health_router
@@ -23,6 +26,22 @@ from app.tasks import run_rag_pipeline
 
 from pydantic import BaseModel
 from typing import Optional
+
+# Custom Prometheus metrics
+RAG_REQUESTS_TOTAL = Counter(
+    "rag_requests_total",
+    "Total number of /query requests",
+    ["status"],
+)
+RAG_REQUEST_DURATION = Histogram(
+    "rag_request_duration_seconds",
+    "Latency of /query requests in seconds",
+)
+GUARDRAILS_BLOCKS_TOTAL = Counter(
+    "guardrails_blocks_total",
+    "Number of requests blocked or allowed by guardrails",
+    ["blocked"],
+)
 
 _security = HTTPBearer(auto_error=False)
 
@@ -124,6 +143,9 @@ def rate_limit(times: int = None, seconds: int = None):
 app = FastAPI(title="Enterprise Agentic RAG API")
 app.include_router(health_router)
 
+# Expose Prometheus metrics at /metrics with default request instrumentation.
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
 
 @app.on_event("startup")
 def startup_event():
@@ -183,10 +205,14 @@ def query(
     thread_id = body.thread_id
     request_id = str(uuid.uuid4())
 
+    start = time.perf_counter()
     with logfire.span("🔍 /query enqueue", request_id=request_id, thread_id=thread_id):
         # Gate: run guardrails synchronously so blocked requests never hit the queue.
         rail_fired, rail_response = guard(q)
         if rail_fired:
+            GUARDRAILS_BLOCKS_TOTAL.labels(blocked="true").inc()
+            RAG_REQUESTS_TOTAL.labels(status="blocked").inc()
+            RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.info("🛡️ Request blocked by guardrails", request_id=request_id, thread_id=thread_id)
             return {
                 "question": q,
@@ -196,8 +222,12 @@ def query(
                 "sources": [],
             }
 
+        GUARDRAILS_BLOCKS_TOTAL.labels(blocked="false").inc()
+
         try:
             task = run_rag_pipeline.delay(q, thread_id)
+            RAG_REQUESTS_TOTAL.labels(status="queued").inc()
+            RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.info(
                 "📨 RAG pipeline enqueued",
                 job_id=task.id,
@@ -211,6 +241,8 @@ def query(
                 "poll_url": f"/query/status/{task.id}",
             }
         except Exception as e:
+            RAG_REQUESTS_TOTAL.labels(status="error").inc()
+            RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.error(
                 f"❌ Failed to enqueue RAG pipeline: {e}",
                 request_id=request_id,

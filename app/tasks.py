@@ -8,10 +8,17 @@ load_dotenv()
 import logfire
 from celery import Celery
 from celery.signals import worker_process_init
+from prometheus_client import Counter
 
 from app.config import settings
 from app.agents.graph import build_graph
 from app.guardrails import initialize_rails, guard
+
+CELERY_JOBS_TOTAL = Counter(
+    "celery_jobs_total",
+    "Celery RAG job outcomes",
+    ["status"],
+)
 
 # Configure Celery to use Redis as both broker and result backend.
 celery_app = Celery(
@@ -49,6 +56,7 @@ def run_rag_pipeline(self, query: str, thread_id: str):
             # Gate 1: NeMo Guardrails
             rail_fired, rail_response = guard(query)
             if rail_fired:
+                CELERY_JOBS_TOTAL.labels(status="blocked").inc()
                 logfire.info(f"🛡️ Request blocked by guardrails | thread={thread_id}")
                 return {
                     "question": query,
@@ -70,6 +78,7 @@ def run_rag_pipeline(self, query: str, thread_id: str):
             config = {"configurable": {"thread_id": thread_id}}
             final_output = rag_agent.invoke(initial_state, config=config)
 
+            CELERY_JOBS_TOTAL.labels(status="success").inc()
             return {
                 "question": query,
                 "answer": final_output.get("final_answer"),
@@ -79,6 +88,7 @@ def run_rag_pipeline(self, query: str, thread_id: str):
             }
 
         except Exception as e:
+            CELERY_JOBS_TOTAL.labels(status="failure").inc()
             logfire.error(f"❌ Celery RAG pipeline failed: {e}")
             # Retry on transient failures; raise final exception on last retry.
             raise self.retry(exc=e, countdown=2 ** self.request.retries)
