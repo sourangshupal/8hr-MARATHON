@@ -1,0 +1,525 @@
+# AWS ECS Fargate Deployment Plan — Enterprise Agentic RAG
+
+> **Approved approach:** Option A — Managed Qdrant with Fargate-hosted API, Worker, and optional UI.  
+> This plan keeps all stateful services (Redis, Postgres, Qdrant) outside of Fargate for simpler operations and reliable auto-scaling.
+
+---
+
+## 1. Objective
+
+Deploy the Enterprise Agentic RAG application on AWS using **Amazon ECS on Fargate** in a microservices architecture, with:
+
+- Separate scaling for synchronous API traffic and asynchronous RAG jobs
+- Managed persistence for Redis, Postgres, and Qdrant
+- Auto-scaling policies for each compute service
+- A local `docker-compose.yml` for pre-cloud validation
+- CI/CD via GitHub Actions → Amazon ECR → ECS
+
+---
+
+## 2. Architecture Overview
+
+### 2.1 Fargate Services (stateless)
+
+| Service | Container Command | Responsibility |
+|---|---|---|
+| **rag-api** | `uvicorn app.main:app --host 0.0.0.0 --port 8080` | Public HTTP API (`/query`, `/health`, `/ready`, `/metrics`, `/graph`) |
+| **rag-worker** | `celery -A app.tasks worker --loglevel=info -Q celery -c 4` | Async LangGraph RAG pipeline execution |
+| **rag-ui** (optional) | `streamlit run ui/app.py --server.port 8501` | End-user chat interface |
+
+All three services use the **same Docker image** from Amazon ECR. Only the command differs.
+
+### 2.2 Managed Services (stateful)
+
+| Component | AWS Service | Purpose |
+|---|---|---|
+| **Redis** | Amazon ElastiCache for Redis (serverless or cluster) | Celery broker/backend + FastAPI rate-limit store |
+| **Postgres** | Amazon RDS PostgreSQL or Aurora Serverless v2 | LangGraph checkpointer (conversation memory) |
+| **Qdrant** | Qdrant Cloud managed service | Vector database for retrieval |
+| **Secrets** | AWS Secrets Manager | API keys, DB URIs, Redis URL |
+| **Ingress** | Application Load Balancer | Public HTTPS access to `rag-api` and `rag-ui` |
+| **Observability** | Amazon CloudWatch Logs + Metrics, optional Managed Prometheus | Logs, custom dashboards, `/metrics` scraping |
+| **CI/CD** | GitHub Actions + Amazon ECR + ECS | Build image, push, and deploy |
+
+---
+
+## 3. Why Option A (Managed Qdrant)?
+
+**Selected:** Qdrant Cloud as a managed vector database.
+
+- No persistent state inside Fargate tasks
+- Qdrant Cloud handles backups, HA, and scaling
+- ECS services remain stateless and easy to auto-scale
+- Fargate + EFS for Qdrant (Option B) is possible but adds operational complexity, latency, and limits horizontal scaling
+
+---
+
+## 4. Networking
+
+1. **VPC** with public and private subnets across at least 2 Availability Zones.
+2. **Public subnets:** ALB, NAT Gateways.
+3. **Private subnets:** Fargate tasks, ElastiCache, RDS.
+4. **Security Groups:**
+
+| Security Group | Inbound | Outbound |
+|---|---|---|
+| `alb-sg` | 80/443 from internet | To `api-sg` and `ui-sg` |
+| `api-sg` | 8080 from `alb-sg` | Redis (6379), RDS (5432), Qdrant Cloud (6333), public internet for LLM APIs |
+| `ui-sg` | 8501 from `alb-sg` | `api-sg` (8080) |
+| `worker-sg` | None (private) | Redis, RDS, Qdrant Cloud, public internet for LLM APIs |
+| `redis-sg` | 6379 from `api-sg`, `worker-sg` | None |
+| `rds-sg` | 5432 from `api-sg`, `worker-sg` | None |
+
+---
+
+## 5. Secrets & Environment Variables
+
+Store all sensitive values in **AWS Secrets Manager** and inject them into task definitions.
+
+### Secrets (Secrets Manager)
+
+- `REDIS_URL`
+- `POSTGRES_URI`
+- `QDRANT_URL`
+- `QDRANT_API_KEY`
+- `GROQ_API_KEY`
+- `GROQ_FALLBACK_API_KEY` (optional)
+- `GEMINI_API_KEY`
+- `PORTKEY_API_KEY`
+- `RAG_API_KEY` (production auth)
+- `LOGFIRE_TOKEN`
+- `LANGSMITH_API_KEY`
+
+### Plain environment variables
+
+- `QDRANT_COLLECTION=enterprise_rag`
+- `RATE_LIMIT_PER_MINUTE=60`
+- `LOGFIRE_IGNORE_NO_CONFIG=0`
+- `PYTHONUNBUFFERED=1`
+
+---
+
+## 6. Container Image
+
+A single Docker image is built and pushed to Amazon ECR.
+
+- **Repository:** `enterprise-rag`
+- **Tags:** `git-sha` and `latest`
+- **Lifecycle policy:** keep last 30 images
+
+### Dockerfile production hardening
+
+The existing `Dockerfile` is already close. Add the following for production:
+
+```dockerfile
+EXPOSE 8080
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
+```
+
+This runs the container as a non-root user.
+
+---
+
+## 7. ECS Task Definitions
+
+### 7.1 rag-api
+
+```json
+{
+  "family": "rag-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "ecsTaskExecutionRole",
+  "taskRoleArn": "rag-api-task-role",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "<ecr>/enterprise-rag:<git-sha>",
+      "command": ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "5"],
+      "portMappings": [{"containerPort": 8080, "protocol": "tcp"}],
+      "environment": [
+        {"name": "QDRANT_COLLECTION", "value": "enterprise_rag"},
+        {"name": "RATE_LIMIT_PER_MINUTE", "value": "60"},
+        {"name": "PYTHONUNBUFFERED", "value": "1"}
+      ],
+      "secrets": [
+        {"name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/redis-url"},
+        {"name": "POSTGRES_URI", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/postgres-uri"},
+        {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
+        {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
+        {"name": "GROQ_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/groq-api-key"},
+        {"name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/gemini-api-key"},
+        {"name": "PORTKEY_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/portkey-api-key"},
+        {"name": "RAG_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/rag-api-key"},
+        {"name": "LOGFIRE_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/logfire-token"},
+        {"name": "LANGSMITH_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/langsmith-api-key"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/rag-api",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}
+```
+
+### 7.2 rag-worker
+
+Uses the same image, but with larger CPU/memory because it runs embeddings, reranking, and LLM calls.
+
+```json
+{
+  "family": "rag-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "ecsTaskExecutionRole",
+  "taskRoleArn": "rag-worker-task-role",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "<ecr>/enterprise-rag:<git-sha>",
+      "command": ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "4"],
+      "environment": [
+        {"name": "QDRANT_COLLECTION", "value": "enterprise_rag"},
+        {"name": "PYTHONUNBUFFERED", "value": "1"}
+      ],
+      "secrets": [
+        {"name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/redis-url"},
+        {"name": "POSTGRES_URI", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/postgres-uri"},
+        {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
+        {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
+        {"name": "GROQ_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/groq-api-key"},
+        {"name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/gemini-api-key"},
+        {"name": "PORTKEY_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/portkey-api-key"},
+        {"name": "RAG_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/rag-api-key"},
+        {"name": "LOGFIRE_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/logfire-token"},
+        {"name": "LANGSMITH_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/langsmith-api-key"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/rag-worker",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "worker"
+        }
+      }
+    }
+  ]
+}
+```
+
+### 7.3 rag-ui (optional)
+
+```json
+{
+  "family": "rag-ui",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "ecsTaskExecutionRole",
+  "taskRoleArn": "rag-ui-task-role",
+  "containerDefinitions": [
+    {
+      "name": "ui",
+      "image": "<ecr>/enterprise-rag:<git-sha>",
+      "command": ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"],
+      "portMappings": [{"containerPort": 8501, "protocol": "tcp"}],
+      "environment": [
+        {"name": "API_BASE_URL", "value": "https://api.yourdomain.com"},
+        {"name": "PYTHONUNBUFFERED", "value": "1"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/rag-ui",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ui"
+        }
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 8. Auto-Scaling
+
+### 8.1 rag-api
+
+Target tracking policies:
+
+- **ALB Request Count Per Target** > 1000
+- **CPU Utilization** > 70%
+- **Memory Utilization** > 70%
+
+**Scale:** min 2, max 10 tasks.
+
+### 8.2 rag-worker
+
+Celery uses Redis, so queue depth is not a native CloudWatch metric. Choose one of the following:
+
+**Option A — Custom CloudWatch metric (recommended):**
+
+- Deploy a small Lambda or sidecar that periodically publishes `CeleryQueueLength` to CloudWatch.
+- Scale the worker service on that metric.
+
+**Option B — Switch Celery broker to Amazon SQS:**
+
+- Change `REDIS_URL` to an SQS URL.
+- Use the native `ApproximateNumberOfMessagesVisible` metric for target tracking.
+
+**Scale:** min 1, max 20 tasks.
+
+### 8.3 rag-ui
+
+If the UI is public:
+
+- Scale on ALB request count or CPU utilization
+- **Scale:** min 1, max 4 tasks
+
+If the UI is internal-only, run a fixed count of 1.
+
+---
+
+## 9. Local `docker-compose.yml`
+
+Use this file to validate the full stack locally before deploying to AWS.
+
+```yaml
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: enterprise_rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8080"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_URI: postgresql://postgres:postgres@postgres:5432/enterprise_rag
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ""
+      QDRANT_COLLECTION: enterprise_rag
+      RATE_LIMIT_PER_MINUTE: "60"
+      RAG_API_KEY: ""
+      LOGFIRE_IGNORE_NO_CONFIG: "1"
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+      - qdrant
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_URI: postgresql://postgres:postgres@postgres:5432/enterprise_rag
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ""
+      QDRANT_COLLECTION: enterprise_rag
+      RAG_API_KEY: ""
+      LOGFIRE_IGNORE_NO_CONFIG: "1"
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+      - qdrant
+    command: ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "2"]
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE_URL: http://api:8080
+    depends_on:
+      - api
+    command: ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+
+volumes:
+  redis-data:
+  postgres-data:
+  qdrant-data:
+```
+
+Run locally:
+
+```bash
+docker compose up --build
+```
+
+Test:
+
+```bash
+curl http://localhost:8000/health
+```
+
+---
+
+## 10. CI/CD Pipeline
+
+Extend `.github/workflows/ci.yml` with a deploy job:
+
+```yaml
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/enterprise-rag:$IMAGE_TAG -f Dockerfile .
+          docker push $ECR_REGISTRY/enterprise-rag:$IMAGE_TAG
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service --cluster rag-cluster --service rag-api --force-new-deployment
+          aws ecs update-service --cluster rag-cluster --service rag-worker --force-new-deployment
+```
+
+For safer production deploys, use `aws-actions/amazon-ecs-deploy-task-definition` with a task-definition JSON file so each deployment rolls out a new task definition revision.
+
+---
+
+## 11. Data Ingestion in Production
+
+Do **not** run ingestion as a long-running ECS service. Use one of these patterns:
+
+1. **Fargate one-off task:** run `python -m app.ingestion.processor s3://bucket/data --wipe` via ECS `RunTask`.
+2. **AWS Batch:** for large or scheduled ingestion jobs.
+3. **GitHub Actions:** for small static datasets, run ingestion as a CI/CD step after deployment.
+
+If using S3, download files into the task's ephemeral storage before running the processor.
+
+---
+
+## 12. Monitoring & Alerting
+
+1. **CloudWatch Logs:** all services log to `/ecs/<service>` log groups.
+2. **CloudWatch Alarms:**
+   - `rag-api` 5xx error rate > 1%
+   - `rag-worker` task failures > threshold
+   - RDS CPU utilization > 80%
+   - ElastiCache memory utilization > 80%
+3. **Prometheus:** scrape `/metrics` from `rag-api`. Use Amazon Managed Prometheus or a self-hosted Prometheus sidecar.
+4. **Custom dashboard metrics:**
+   - Celery queue length
+   - `/query` p50/p95 latency
+   - Guardrails block rate
+   - RAG answer token count
+5. **Logfire & LangSmith:** continue using existing integrations for distributed tracing and agent step tracing.
+
+---
+
+## 13. Cost & Operational Notes
+
+- **Fargate** is easy to operate but more expensive per vCPU than EC2. For steady high throughput, consider EC2-backed ECS or EKS.
+- **ElastiCache Serverless** is simplest; a provisioned cluster is cheaper for predictable load.
+- **Aurora Serverless v2** is best for variable Postgres load; provisioned RDS is cheaper for steady load.
+- **Qdrant Cloud** is the simplest vector DB option. Only self-host Qdrant if data residency requirements demand it.
+- Keep `requirements-prod.txt` lean. Do not include `streamlit`, `ragas`, `sentence-transformers`, or `deepeval` in the production image unless required.
+
+---
+
+## 14. Deployment Sequence
+
+1. Create VPC, public/private subnets, IGW, NAT Gateways, and security groups.
+2. Create ElastiCache Redis and RDS Postgres (or Aurora).
+3. Sign up for Qdrant Cloud and create the `enterprise_rag` collection.
+4. Create ECR repository and push the Docker image.
+5. Create Secrets Manager entries for all environment variables.
+6. Create IAM roles: `ecsTaskExecutionRole` and task-specific roles.
+7. Create the ECS cluster.
+8. Register task definitions for `rag-api`, `rag-worker`, and optional `rag-ui`.
+9. Create Application Load Balancer and target groups.
+10. Create ECS services with initial desired counts.
+11. Configure auto-scaling policies.
+12. Verify endpoints:
+    - `GET /health`
+    - `GET /ready`
+    - `POST /query`
+    - `GET /query/status/{job_id}`
+    - `GET /metrics`
+13. Run ingestion job and validate RAG answers.
+14. Enable CloudWatch alarms and dashboards.
+
+---
+
+## 15. Alternative: Option B — Self-hosted Qdrant
+
+If you later decide you need full data residency, you can add a `rag-qdrant` Fargate service using the official `qdrant/qdrant` image with an Amazon EFS volume mounted at `/qdrant/storage`.
+
+Trade-offs:
+
+- **Pros:** data stays in your AWS account; no third-party dependency
+- **Cons:** you manage backups, HA, and scaling; EFS latency can affect query performance; horizontal scaling requires Qdrant clustering
+
+For most production workloads, **Qdrant Cloud (Option A)** is the better choice.
