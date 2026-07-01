@@ -13,6 +13,7 @@ from prometheus_client import Counter
 from app.config import settings
 from app.agents.graph import build_graph
 from app.guardrails import initialize_rails, guard
+from app.logging import set_request_id, get_request_id
 
 CELERY_JOBS_TOTAL = Counter(
     "celery_jobs_total",
@@ -46,12 +47,13 @@ def init_worker(**kwargs):
 
 
 @celery_app.task(bind=True, max_retries=3)
-def run_rag_pipeline(self, query: str, thread_id: str):
+def run_rag_pipeline(self, query: str, thread_id: str, request_id: str | None = None):
     """
     Celery task that runs the full RAG pipeline (guardrails + LangGraph).
     Stores the final API-style response as the task result.
     """
-    with logfire.span("🚀 Celery RAG pipeline", task_id=self.request.id, thread_id=thread_id):
+    set_request_id(request_id)
+    with logfire.span("🚀 Celery RAG pipeline", task_id=self.request.id, thread_id=thread_id, request_id=request_id):
         try:
             # Gate 1: NeMo Guardrails
             rail_fired, rail_response = guard(query)

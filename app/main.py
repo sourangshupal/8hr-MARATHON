@@ -21,6 +21,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.agents.graph import build_graph
 from app.guardrails import initialize_rails, guard
 from app.health import router as health_router
+from app.logging import set_request_id, get_request_id
 from app.config import settings
 from app.tasks import run_rag_pipeline
 
@@ -204,6 +205,7 @@ def query(
     q = body.q
     thread_id = body.thread_id
     request_id = str(uuid.uuid4())
+    set_request_id(request_id)
 
     start = time.perf_counter()
     with logfire.span("🔍 /query enqueue", request_id=request_id, thread_id=thread_id):
@@ -225,7 +227,7 @@ def query(
         GUARDRAILS_BLOCKS_TOTAL.labels(blocked="false").inc()
 
         try:
-            task = run_rag_pipeline.delay(q, thread_id)
+            task = run_rag_pipeline.delay(q, thread_id, request_id=request_id)
             RAG_REQUESTS_TOTAL.labels(status="queued").inc()
             RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.info(
@@ -265,16 +267,23 @@ def query_status(job_id: str):
     """
     from celery.result import AsyncResult
 
-    result = AsyncResult(job_id, app=run_rag_pipeline.app)
-    response = {
-        "job_id": job_id,
-        "status": result.status,
-    }
+    request_id = str(uuid.uuid4())
+    set_request_id(request_id)
 
-    if result.ready():
-        if result.successful():
-            response["result"] = result.get()
-        else:
-            response["error"] = str(result.result)
+    with logfire.span("🔍 /query/status", job_id=job_id, request_id=request_id):
+        result = AsyncResult(job_id, app=run_rag_pipeline.app)
+        response = {
+            "job_id": job_id,
+            "request_id": request_id,
+            "status": result.status,
+        }
+
+        if result.ready():
+            if result.successful():
+                response["result"] = result.get()
+                logfire.info("✅ Job result returned", job_id=job_id, request_id=request_id)
+            else:
+                response["error"] = str(result.result)
+                logfire.warning("❌ Job failed", job_id=job_id, request_id=request_id, error=response["error"])
 
     return response

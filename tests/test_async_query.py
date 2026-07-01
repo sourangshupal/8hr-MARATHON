@@ -21,6 +21,11 @@ def test_query_returns_job_id():
     assert data["job_id"] == "test-job-123"
     assert data["status"] == "queued"
     assert data["poll_url"] == "/query/status/test-job-123"
+    assert "request_id" in data
+    # request_id should be passed through to the Celery task.
+    mock_delay.assert_called_once()
+    _, kwargs = mock_delay.call_args
+    assert kwargs.get("request_id") == data["request_id"]
 
 
 def test_query_status_returns_completed_result():
@@ -40,3 +45,4 @@ def test_query_status_returns_completed_result():
     data = response.json()
     assert data["status"] == "SUCCESS"
     assert data["result"]["answer"] == "hello"
+    assert "request_id" in data
