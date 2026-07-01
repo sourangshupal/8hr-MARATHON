@@ -85,45 +85,71 @@ if prompt := st.chat_input("Ask about your documentation..."):
                 try:
                     # DISTRIBUTED TRACE: Calling Backend
                     with logfire.span("📡 Calling RAG Backend"):
-                        # Get backend URL from env, or default to local if not set
                         base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                         url = f"{base_url}/query"
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
                         response = requests.post(url, json=payload, timeout=60)
                         data = response.json()
-                    
+
+                    # Guardrails can block synchronously without creating a job.
+                    if data.get("status") == "Blocked by guardrails.":
+                        status.update(label="🛡️ Blocked by guardrails", state="complete", expanded=False)
+                        full_answer = data.get("answer", "Blocked by guardrails.")
+                    elif "job_id" in data:
+                        job_id = data["job_id"]
+                        poll_url = f"{base_url}/query/status/{job_id}"
+                        result_data = None
+                        max_attempts = 60
+                        for attempt in range(max_attempts):
+                            with logfire.span("🔄 Polling RAG job", job_id=job_id, attempt=attempt):
+                                poll_resp = requests.get(poll_url, timeout=30)
+                                poll_resp.raise_for_status()
+                                poll_data = poll_resp.json()
+                            job_status = poll_data.get("status", "UNKNOWN")
+                            status.write(f"⏳ Job status: {job_status} (attempt {attempt + 1}/{max_attempts})")
+                            if job_status in ("SUCCESS", "FAILURE"):
+                                result_data = poll_data.get("result") or poll_data.get("error")
+                                break
+                            time.sleep(2)
+                        if result_data is None:
+                            raise RuntimeError("Polling timed out waiting for the RAG job to complete.")
+                        if isinstance(result_data, dict):
+                            data = result_data
+                            status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
+                        else:
+                            raise RuntimeError(f"RAG job failed: {result_data}")
+                    else:
+                        raise RuntimeError(f"Unexpected /query response: {data}")
+
                     # Show Reasoning Steps from Backend
                     steps = data.get("thought_process", [])
                     for step in steps:
                         st.write(f"⚙️ {step}")
-                    
-                    status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
-                    
+
                     # --- SHOW SOURCES (NESTED EXPANDABLES) ---
                     sources = data.get("sources", [])
                     if sources:
                         with st.expander("📄 View Retrieved Context (Sources)"):
                             for i, source in enumerate(sources):
-                                # Create a preview title for each chunk
                                 preview = source[:100].replace("\n", " ") + "..."
                                 with st.expander(f"Chunk {i+1}: {preview}"):
                                     st.info(source)
                 except Exception as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")
                     status.update(label="❌ Connection Failed", state="error")
-                    st.error("Backend Offline.")
+                    st.error(f"Backend Offline or job failed: {e}")
                     st.stop()
 
             # Final Answer Streaming
             answer_placeholder = st.empty()
             full_answer = data.get("answer", "No response.")
-            
+
             curr_text = ""
             for char in full_answer:
                 curr_text += char
                 answer_placeholder.markdown(curr_text + "▌")
                 time.sleep(0.005)
-            
+
             answer_placeholder.markdown(full_answer)
             st.session_state.messages.append({"role": "assistant", "content": full_answer})
             logfire.info("✅ Chat cycle completed successfully.")

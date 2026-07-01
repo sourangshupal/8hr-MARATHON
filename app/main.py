@@ -19,6 +19,7 @@ from app.agents.graph import build_graph
 from app.guardrails import initialize_rails, guard
 from app.health import router as health_router
 from app.config import settings
+from app.tasks import run_rag_pipeline
 
 from pydantic import BaseModel
 from typing import Optional
@@ -175,62 +176,73 @@ def query(
     _api_key: str = Depends(verify_api_key),
 ):
     """
-    Executes the LangGraph RAG flow with memory using a POST request.
+    Enqueues the LangGraph RAG pipeline as a background Celery task.
+    Returns immediately with a job_id that can be polled via /query/status/{job_id}.
     """
     q = body.q
     thread_id = body.thread_id
     request_id = str(uuid.uuid4())
 
-    initial_state = {
-        "messages": [{"role": "user", "content": q}],
-        "current_query": q,
-        "documents": [],
-        "plan": ["Start"],
-        "status": "Initializing Graph..."
-    }
-
-    # Configuration for Memory (Thread ID)
-    config = {"configurable": {"thread_id": thread_id}}
-
-    with logfire.span("🔍 /query request", request_id=request_id, thread_id=thread_id):
-        try:
-            # Gate 1: NeMo Guardrails — blocks off-topic, jailbreaks, and handles dialog
-            rail_fired, rail_response = guard(q)
-            if rail_fired:
-                logfire.info(f"🛡️ Request blocked by guardrails | thread={thread_id}")
-                return {
-                    "question": q,
-                    "answer": rail_response,
-                    "thought_process": ["Intent: Guardrails Fired", "Retrieval: Skipped"],
-                    "status": "Blocked by guardrails.",
-                    "sources": []
-                }
-
-            # Gate 2: LangGraph RAG pipeline
-            # Run the graph synchronously to preserve Logfire context variables
-            final_output = app.state.rag_agent.invoke(initial_state, config=config)
-
+    with logfire.span("🔍 /query enqueue", request_id=request_id, thread_id=thread_id):
+        # Gate: run guardrails synchronously so blocked requests never hit the queue.
+        rail_fired, rail_response = guard(q)
+        if rail_fired:
+            logfire.info("🛡️ Request blocked by guardrails", request_id=request_id, thread_id=thread_id)
             return {
                 "question": q,
-                "answer": final_output.get("final_answer"),
-                "thought_process": final_output.get("plan"),
-                "status": final_output.get("status"),
-                "sources": final_output.get("documents", [])
+                "answer": rail_response,
+                "thought_process": ["Intent: Guardrails Fired", "Retrieval: Skipped"],
+                "status": "Blocked by guardrails.",
+                "sources": [],
+            }
+
+        try:
+            task = run_rag_pipeline.delay(q, thread_id)
+            logfire.info(
+                "📨 RAG pipeline enqueued",
+                job_id=task.id,
+                request_id=request_id,
+                thread_id=thread_id,
+            )
+            return {
+                "job_id": task.id,
+                "request_id": request_id,
+                "status": "queued",
+                "poll_url": f"/query/status/{task.id}",
             }
         except Exception as e:
             logfire.error(
-                f"❌ Backend Execution Failed: {e}",
+                f"❌ Failed to enqueue RAG pipeline: {e}",
                 request_id=request_id,
                 thread_id=thread_id,
             )
             return JSONResponse(
                 status_code=500,
                 content={
-                    "question": q,
-                    "answer": "I apologize, but I encountered an internal error while processing your request. Please try again later.",
-                    "thought_process": ["Error encountered during execution."],
-                    "status": "error",
-                    "sources": [],
                     "request_id": request_id,
+                    "status": "error",
+                    "message": "Failed to enqueue request. Please try again later.",
                 },
             )
+
+
+@app.get("/query/status/{job_id}")
+def query_status(job_id: str):
+    """
+    Poll the status/result of an async RAG query job.
+    """
+    from celery.result import AsyncResult
+
+    result = AsyncResult(job_id, app=run_rag_pipeline.app)
+    response = {
+        "job_id": job_id,
+        "status": result.status,
+    }
+
+    if result.ready():
+        if result.successful():
+            response["result"] = result.get()
+        else:
+            response["error"] = str(result.result)
+
+    return response

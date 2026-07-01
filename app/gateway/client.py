@@ -1,4 +1,5 @@
 import logfire
+from openai import AsyncOpenAI
 from portkey_ai import Portkey, createHeaders, PORTKEY_GATEWAY_URL
 from langchain_openai import ChatOpenAI
 
@@ -54,6 +55,26 @@ def get_langchain_llm(feature: str = "rag") -> ChatOpenAI:
             }
         )
     )
+
+def get_async_openai_client(feature: str = "rag") -> AsyncOpenAI:
+    """
+    Returns an async OpenAI client that routes through the Portkey gateway.
+    Use this for non-LangChain async LLM calls (e.g. async FastAPI endpoints).
+    """
+    return AsyncOpenAI(
+        api_key=settings.PORTKEY_API_KEY,
+        base_url=PORTKEY_GATEWAY_URL,
+        default_headers=createHeaders(
+            api_key=settings.PORTKEY_API_KEY,
+            config=GATEWAY_CONFIG,
+            metadata={
+                "feature": feature,
+                "_user": "rag-system",
+                "environment": "production",
+            },
+        ),
+    )
+
 
 def extract_cache_status(response) -> str:
     """
