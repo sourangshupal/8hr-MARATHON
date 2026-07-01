@@ -1,5 +1,5 @@
 """Tests for retry-with-backoff behavior on external service calls."""
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.services.retrieval.qdrant_service import search_enterprise_knowledge
 from app.services.retrieval.ranking_service import rerank_documents

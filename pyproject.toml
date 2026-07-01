@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "enterprise-rag"
+version = "0.1.0"
+description = "Enterprise Agentic RAG with LangGraph, Guardrails, and LLM Gateway"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --tb=short"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [
+    ".venv",
+    "node_modules",
+    "__pycache__",
+    ".git",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Import order is intentionally deferred so logfire/dotenv are configured first.
+"app/main.py" = ["E402"]
+"app/tasks.py" = ["E402"]
+"evals/app.py" = ["E402"]
+"evals/run_evals.py" = ["E402"]
+"evals/metrics.py" = ["E402"]
+"evals/pipeline.py" = ["E402"]
+"evals/guardrails_eval.py" = ["E402"]
+# __init__.py files re-export public symbols.
+"app/**/__init__.py" = ["F401"]
+"evals/__init__.py" = ["F401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

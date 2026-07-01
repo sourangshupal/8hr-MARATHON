@@ -1,7 +1,8 @@
 import time
+
 import logfire
-from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 from flashrank import Ranker, RerankRequest
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 # Lazy initialization - Ranker is loaded on first use to ensure logfire.configure() has run
 _ranker = None
@@ -9,7 +10,7 @@ _ranker = None
 
 def _get_ranker() -> Ranker:
     """
-    Initializes the FlashRank engine lazily. 
+    Initializes the FlashRank engine lazily.
     FlashRank uses a local ONNX model (ms-marco-MiniLM-L-6-v2) for ultra-fast reranking.
     """
     global _ranker

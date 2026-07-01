@@ -1,6 +1,5 @@
 """Tests for LangGraph checkpointer configuration."""
 from unittest.mock import MagicMock, patch
-import sys
 
 from langgraph.checkpoint.memory import MemorySaver
 

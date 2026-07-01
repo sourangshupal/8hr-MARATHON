@@ -1,7 +1,8 @@
 import logfire
-from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
+
 from app.agents.state import AgentState
-from app.gateway import portkey_client, extract_cache_status
+from app.gateway import extract_cache_status, portkey_client
 
 
 def generate_node(state: AgentState):

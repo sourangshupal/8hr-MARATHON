@@ -60,6 +60,9 @@ celery                         # Distributed task queue for async graph runs
 prometheus-client              # Prometheus metrics exposition
 prometheus-fastapi-instrumentator  # Automatic FastAPI request metrics
 
+# --- DEV / CI ---
+ruff                           # Fast Python linter and formatter
+
 # --- EVALUATION (EVALS) ---
 ragas                       # RAG-specific evaluation metrics (Faithfulness, Relevancy, Recall)
 deepeval                    # Pytest-compatible test runner wrapping RAGAS & safety metrics

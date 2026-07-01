@@ -5,10 +5,11 @@ Classifies each result as TP / TN / FP / FN and computes precision + recall.
 """
 
 
-import time
 import copy
-import requests
+import time
+
 import logfire
+import requests
 
 API_URL = "http://localhost:8000/query"
 

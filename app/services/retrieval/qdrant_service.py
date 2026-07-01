@@ -1,10 +1,9 @@
 import logfire
-from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 from qdrant_client import QdrantClient
-from qdrant_client.http import models
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
+
 from app.config import settings
 from app.services.retrieval.embedding import embed_query
-
 
 # Initialize Qdrant Client
 client = QdrantClient(

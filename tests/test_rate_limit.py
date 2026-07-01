@@ -1,11 +1,12 @@
 """Tests for rate limiting."""
 from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.main import app
 from app.config import settings
+from app.main import app
 
 
 def test_rate_limit_blocks_excessive_requests():

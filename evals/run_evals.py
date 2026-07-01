@@ -13,6 +13,7 @@ Requires the FastAPI backend to be running on localhost:8000 (or BACKEND_URL).
 import json
 import os
 import sys
+
 import logfire
 
 # Allow running from repo root without package installation.
@@ -23,8 +24,8 @@ from dotenv import load_dotenv
 load_dotenv()
 logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), service_name="evals")
 
-from evals.pipeline import run_pipeline, load_golden_dataset
-from evals.guardrails_eval import run_guardrails_eval, compute_guardrails_metrics
+from evals.guardrails_eval import compute_guardrails_metrics, run_guardrails_eval
+from evals.pipeline import load_golden_dataset, run_pipeline
 
 
 def _print_progress(i: int, total: int, label: str, item: str):

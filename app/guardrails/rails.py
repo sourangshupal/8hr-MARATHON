@@ -1,10 +1,9 @@
 import logfire
 from langchain_groq import ChatGroq
-from nemoguardrails import RailsConfig, LLMRails
+from nemoguardrails import LLMRails, RailsConfig
 
 from app.config import settings
-from app.guardrails.colang_rules import COLANG_CONTENT, YAML_CONTENT, RAIL_INDICATORS
-
+from app.guardrails.colang_rules import COLANG_CONTENT, RAIL_INDICATORS, YAML_CONTENT
 
 _rails: LLMRails | None = None
 
@@ -30,8 +29,8 @@ def initialize_rails() -> None:
 
     _rails = LLMRails(config, llm=guard_llm)
     logfire.info("🛡️ NeMo Guardrails initialised (llama-3.1-8b-instant).")
-    
-    
+
+
 
 
 def guard(message: str) -> tuple[bool, str | None]:

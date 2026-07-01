@@ -6,12 +6,13 @@ and actual_tools_called (detected from thought_process).
 """
 
 
-import time
 import copy
 import json
 import os
-import requests
+import time
+
 import logfire
+import requests
 
 API_URL = "http://localhost:8000/query"
 STATUS_URL_TEMPLATE = "http://localhost:8000/query/status/{job_id}"
@@ -146,8 +147,8 @@ def run_pipeline(golden_dataset: dict, progress_callback=None) -> dict:
 def save_results(dataset: dict, path: str) -> None:
     with open(path, "w") as f:
         json.dump(dataset, f, indent=2)
-        
-        
+
+
 def load_golden_dataset() -> dict:
     golden_path = os.path.join(os.path.dirname(__file__), "golden_dataset.json")
     with open(golden_path) as f:

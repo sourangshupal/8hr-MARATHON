@@ -2,31 +2,32 @@
 # CRITICAL: logfire MUST be configured before ALL other imports
 # so that spans from all modules are captured from the start.
 # ============================================================
-import logfire
 import os
+
+import logfire
 from dotenv import load_dotenv
 
 load_dotenv()
 logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
 
 # Now safe to import app modules - logfire is already active
-import asyncio
 import time
 import uuid
-from fastapi import FastAPI, Response, Request, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
-from app.agents.graph import build_graph
-from app.guardrails import initialize_rails, guard
-from app.health import router as health_router
-from app.logging import set_request_id, get_request_id
-from app.config import settings
-from app.tasks import run_rag_pipeline
-
 from pydantic import BaseModel
-from typing import Optional
+
+from app.agents.graph import build_graph
+from app.config import settings
+from app.guardrails import guard, initialize_rails
+from app.health import router as health_router
+from app.logging import set_request_id
+from app.tasks import run_rag_pipeline
 
 # Custom Prometheus metrics
 RAG_REQUESTS_TOTAL = Counter(
@@ -49,11 +50,11 @@ _security = HTTPBearer(auto_error=False)
 
 def _init_rate_limiter():
     """Initialize rate limiting. Use Redis in production; fall back to in-memory storage locally."""
+    from limits.storage import RedisStorage
     from slowapi import Limiter
-    from slowapi.util import get_remote_address
     from slowapi.errors import RateLimitExceeded
     from slowapi.extension import _rate_limit_exceeded_handler
-    from limits.storage import RedisStorage
+    from slowapi.util import get_remote_address
 
     try:
         storage = RedisStorage(settings.REDIS_URL)
@@ -172,8 +173,8 @@ def startup_event():
 class QueryRequest(BaseModel):
     q: str
     thread_id: Optional[str] = "default_user"
-    
-    
+
+
 @app.get("/")
 def home():
     return {"message": "Enterprise LangGraph RAG API is live."}

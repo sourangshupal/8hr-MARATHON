@@ -1,9 +1,10 @@
 """Tests for API authentication and rate limiting."""
 from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.config import settings
+from app.main import app
 
 
 def test_query_open_when_no_api_key_configured():
@@ -52,5 +53,6 @@ def test_query_accepts_valid_api_key():
                 json={"q": "hi"},
                 headers={"Authorization": "Bearer super-secret"},
             )
+            assert response.status_code == 200
     finally:
         settings.API_KEY = original_key

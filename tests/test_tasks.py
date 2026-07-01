@@ -1,5 +1,6 @@
 """Tests for Celery task retry behavior."""
 from unittest.mock import patch
+
 import requests
 
 from app.tasks import run_rag_pipeline

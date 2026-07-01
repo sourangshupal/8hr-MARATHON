@@ -1,10 +1,8 @@
-import logfire
-from openai import AsyncOpenAI
-from portkey_ai import Portkey, createHeaders, PORTKEY_GATEWAY_URL
 from langchain_openai import ChatOpenAI
+from openai import AsyncOpenAI
+from portkey_ai import PORTKEY_GATEWAY_URL, Portkey, createHeaders
 
 from app.config import settings
-
 
 # Production gateway config:
 #   - Fallback: primary @rag/llama-3.3-70b-versatile → @brag/llama-3.1-8b-instant on failure

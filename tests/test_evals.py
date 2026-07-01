@@ -1,7 +1,7 @@
 """Smoke tests for the eval pipeline (no live API required)."""
 import importlib.util
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # Load eval modules directly from file to avoid importing the whole evals package
 # (which pulls in ragas and can fail in a minimal test environment).

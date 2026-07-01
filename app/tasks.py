@@ -1,5 +1,6 @@
 """Celery tasks for running the LangGraph RAG pipeline asynchronously."""
 import os
+
 from dotenv import load_dotenv
 
 # Load environment variables before any other app imports.
@@ -10,10 +11,10 @@ from celery import Celery
 from celery.signals import worker_process_init
 from prometheus_client import Counter
 
-from app.config import settings
 from app.agents.graph import build_graph
-from app.guardrails import initialize_rails, guard
-from app.logging import set_request_id, get_request_id
+from app.config import settings
+from app.guardrails import guard, initialize_rails
+from app.logging import set_request_id
 
 CELERY_JOBS_TOTAL = Counter(
     "celery_jobs_total",

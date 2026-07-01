@@ -3,8 +3,8 @@ import logfire
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.services.retrieval.qdrant_service import search_enterprise_knowledge
 from app.gateway.client import portkey_client
+from app.services.retrieval.qdrant_service import search_enterprise_knowledge
 
 router = APIRouter(tags=["health"])
 

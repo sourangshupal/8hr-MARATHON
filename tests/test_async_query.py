@@ -1,7 +1,8 @@
 """Tests for async /query enqueue and status endpoints."""
-from unittest.mock import patch, MagicMock
-from fastapi.testclient import TestClient
+from unittest.mock import MagicMock, patch
+
 import celery.result
+from fastapi.testclient import TestClient
 
 from app.main import app
 
