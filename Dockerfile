@@ -15,4 +15,11 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements-prod.txt
 # Copy only the app package — everything else (evals/, ui/, DATA/, DOCS/) stays out
 COPY app/ ./app/
 
+# Expose the port documented in the task definitions and health checks.
+EXPOSE 8080
+
+# Run as a non-root user for production hardening.
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "5"]

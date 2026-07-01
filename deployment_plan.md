@@ -410,42 +410,56 @@ curl http://localhost:8000/health
 
 ## 10. CI/CD Pipeline
 
-Extend `.github/workflows/ci.yml` with a deploy job:
+The repository now contains two workflows:
 
-```yaml
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
+- `.github/workflows/ci.yml` — linting and unit tests.
+- `.github/workflows/cd.yml` — build image, push to ECR, and deploy to ECS (triggered after CI succeeds on `main` or `deployment`).
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+The CD workflow uses `aws-actions/amazon-ecs-deploy-task-definition` with rendered task-definition JSON files stored in `.aws/task-definitions/`.
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+### GitHub Secrets Required
 
-      - name: Build, tag, and push image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/enterprise-rag:$IMAGE_TAG -f Dockerfile .
-          docker push $ECR_REGISTRY/enterprise-rag:$IMAGE_TAG
+Set these in **Settings → Secrets and variables → Actions**:
 
-      - name: Deploy to ECS
-        run: |
-          aws ecs update-service --cluster rag-cluster --service rag-api --force-new-deployment
-          aws ecs update-service --cluster rag-cluster --service rag-worker --force-new-deployment
+| Secret | Description |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | AWS IAM access key with ECS, ECR, and Secrets Manager permissions |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key |
+| `AWS_REGION` | Target AWS region (e.g., `us-east-1`) |
+| `ECR_REPOSITORY` | ECR repository name (default: `enterprise-rag`) |
+| `ECS_CLUSTER` | ECS cluster name (default: `rag-cluster`) |
+| `ECS_SERVICE_API` | ECS service name for API (default: `rag-api`) |
+| `ECS_SERVICE_WORKER` | ECS service name for worker (default: `rag-worker`) |
+| `ECS_SERVICE_UI` | ECS service name for UI (default: `rag-ui`) |
+| `REDIS_URL_ARN` | Secrets Manager ARN for `REDIS_URL` |
+| `POSTGRES_URI_ARN` | Secrets Manager ARN for `POSTGRES_URI` |
+| `QDRANT_URL_ARN` | Secrets Manager ARN for `QDRANT_URL` |
+| `QDRANT_API_KEY_ARN` | Secrets Manager ARN for `QDRANT_API_KEY` |
+| `GROQ_API_KEY_ARN` | Secrets Manager ARN for `GROQ_API_KEY` |
+| `GEMINI_API_KEY_ARN` | Secrets Manager ARN for `GEMINI_API_KEY` |
+| `PORTKEY_API_KEY_ARN` | Secrets Manager ARN for `PORTKEY_API_KEY` |
+| `RAG_API_KEY_ARN` | Secrets Manager ARN for `RAG_API_KEY` |
+| `LOGFIRE_TOKEN_ARN` | Secrets Manager ARN for `LOGFIRE_TOKEN` |
+| `LANGSMITH_API_KEY_ARN` | Secrets Manager ARN for `LANGSMITH_API_KEY` |
+
+### What the CD workflow does
+
+1. Waits for the `CI` workflow to succeed on `main` or `deployment`.
+2. Logs in to Amazon ECR.
+3. Builds the Docker image tagged with the commit SHA and `latest`.
+4. Pushes both tags to ECR.
+5. Renders task-definition templates from `.aws/task-definitions/` by substituting placeholders with image URIs and secret ARNs.
+6. Deploys `rag-api`, `rag-worker`, and optionally `rag-ui` to ECS.
+7. Waits for each service to reach a stable state before continuing.
+
+### Files added for CD
+
+```text
+.github/workflows/cd.yml
+.aws/task-definitions/rag-api.json
+.aws/task-definitions/rag-worker.json
+.aws/task-definitions/rag-ui.json
 ```
-
-For safer production deploys, use `aws-actions/amazon-ecs-deploy-task-definition` with a task-definition JSON file so each deployment rolls out a new task definition revision.
 
 ---
 
