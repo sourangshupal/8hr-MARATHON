@@ -49,6 +49,14 @@ langchain-nvidia-ai-endpoints # LangChain integration with NVIDIA AI Endpoints
 # --- LLM GATEWAY ---
 portkey-ai                  # Portkey Gateway for unified LLM routing, fallbacks & observability
 
+# --- PRODUCTION PERSISTENCE & RELIABILITY ---
+langgraph-checkpoint-postgres  # Postgres-backed LangGraph checkpointer
+psycopg-pool                   # Connection pool for PostgresSaver
+psycopg-binary                 # PostgreSQL driver
+tenacity                       # Retry-with-backoff for external calls
+slowapi                        # Redis-backed API rate limiting (Limiter class)
+redis                          # Redis client for rate limiting & task queue
+
 # --- EVALUATION (EVALS) ---
 ragas                       # RAG-specific evaluation metrics (Faithfulness, Relevancy, Recall)
 deepeval                    # Pytest-compatible test runner wrapping RAGAS & safety metrics

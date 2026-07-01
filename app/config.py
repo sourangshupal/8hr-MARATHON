@@ -23,7 +23,15 @@ class Settings:
     GROQ_SLUG =  "rag"     # primary: @rag/llama-3.3-70b-versatile
     GROQ_SLUG_2 = "brag"  # fallback: @brag/llama-3.1-8b-instant
 
-    
+    # --- PRODUCTION PERSISTENCE ---
+    POSTGRES_URI = os.getenv(
+        "POSTGRES_URI",
+        "postgresql://postgres:postgres@localhost:5432/enterprise_rag"
+    )
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    API_KEY = os.getenv("RAG_API_KEY")  # Required in production for /query auth
+    RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "20"))
+
     # --- OBSERVABILITY ---
     LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "true")
     LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
