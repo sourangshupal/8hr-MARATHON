@@ -12,7 +12,6 @@ from celery import Celery
 from celery.signals import worker_process_init
 from prometheus_client import Counter
 
-from app.agents.graph import build_graph
 from app.config import settings
 from app.guardrails import guard, initialize_rails
 from app.logging import set_request_id
@@ -75,6 +74,10 @@ def run_rag_pipeline(self, query: str, thread_id: str, rag_request_id: str | Non
                 }
 
             # Gate 2: LangGraph RAG pipeline
+            # Imported here (not at module level) so the Celery parent process does not
+            # instantiate network/threaded clients before forking worker children.
+            from app.agents.graph import build_graph
+
             rag_agent = build_graph()
             initial_state = {
                 "messages": [{"role": "user", "content": query}],

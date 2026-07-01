@@ -55,3 +55,6 @@ tenvv
 
 # Logs
 *.log
+
+# Redis local dump
+dump.rdb

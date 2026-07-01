@@ -150,6 +150,8 @@ You need Redis running, a Celery worker, the FastAPI server, and (optionally) th
 redis-server
 
 # Terminal 2 — Celery worker
+# On macOS, prefork can crash due to Objective-C fork-safety checks.
+# Use OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES or --pool=solo for local dev.
 celery -A app.tasks worker --loglevel=info -Q celery
 
 # Terminal 3 — FastAPI backend
