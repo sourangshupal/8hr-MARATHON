@@ -1,4 +1,5 @@
 """Tests for rate limiting."""
+
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient

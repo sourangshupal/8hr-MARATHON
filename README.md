@@ -11,7 +11,10 @@ A production-grade, enterprise-level RAG system built with **LangGraph**, **Port
 - **Gemini Embeddings**: Google `gemini-embedding-2-preview` (3072-dim) via `langchain-google-genai`.
 - **Local Document Parsing**: PDF, HTML, TXT, DOCX, PPTX parsed entirely on-device — no external OCR service.
 - **Observability**: Full trace nesting with **Pydantic Logfire** and **LangSmith** across every agent node.
-- **Evaluation Suite**: RAGAS-powered eval pipeline (6 metrics) with a dedicated Streamlit demo app.
+- **Metrics**: Prometheus `/metrics` endpoint with custom RAG, guardrails, and Celery counters.
+- **Async Job Queue**: `/query` enqueues the LangGraph pipeline to Celery/Redis and returns a `job_id`; clients poll `/query/status/{job_id}`.
+- **API Key & Rate Limiting**: Optional bearer-token auth and Redis-backed (or in-memory) rate limiting.
+- **Evaluation Suite**: RAGAS-powered eval pipeline (6 metrics) with a dedicated Streamlit demo app and a headless `evals/run_evals.py` script.
 
 ---
 
@@ -105,6 +108,14 @@ GEMINI_API_KEY = "..."
 QDRANT_API_KEY = "..."
 QDRANT_CLUSTER_ENDPOINT = "https://your-cluster.cloud.qdrant.io:6333"
 
+# Production persistence & queue
+POSTGRES_URI = "postgresql://postgres:postgres@localhost:5432/enterprise_rag"
+REDIS_URL = "redis://localhost:6379/0"
+
+# API safety
+RAG_API_KEY = ""                       # set in production to require bearer auth
+RATE_LIMIT_PER_MINUTE = 20
+
 # Observability
 LOGFIRE_TOKEN = "..."
 LANGSMITH_API_KEY = "..."
@@ -131,19 +142,55 @@ python -m app.ingestion.processor DATA --wipe
 
 ### 4. Launch the app
 
+The `/query` endpoint is now asynchronous: it enqueues work to Celery/Redis and returns a `job_id`.
+You need Redis running, a Celery worker, the FastAPI server, and (optionally) the Streamlit UI.
+
 ```powershell
-# Terminal 1 — FastAPI backend
+# Terminal 1 — Redis (or use a managed Redis/cloud instance)
+redis-server
+
+# Terminal 2 — Celery worker
+celery -A app.tasks worker --loglevel=info -Q celery
+
+# Terminal 3 — FastAPI backend
 uvicorn app.main:app --reload --port 8000
 
-# Terminal 2 — Streamlit UI
+# Terminal 4 — Streamlit UI
 streamlit run ui/app.py
 ```
 
-### 5. Run the eval suite (optional)
+### 5. Query the API
 
 ```powershell
-# Requires the FastAPI backend running on :8000
+curl -X POST "http://localhost:8000/query" `
+  -H "Content-Type: application/json" `
+  -d '{"q": "How do I start Redis for a Kubernetes work queue?", "thread_id": "user-1"}'
+
+# Response: {"job_id": "...", "status": "queued", "poll_url": "/query/status/..."}
+
+curl "http://localhost:8000/query/status/<job_id>"
+```
+
+### 6. Run the eval suite
+
+```powershell
+# Headless CLI runner (requires backend on :8000)
+python -m evals.run_evals
+
+# Or use the Streamlit demo
 streamlit run evals/app.py
+```
+
+### 7. Run tests locally
+
+```powershell
+# Lint + format checks
+ruff check app tests evals
+ruff format --check app tests evals
+
+# Unit tests
+$env:LOGFIRE_IGNORE_NO_CONFIG=1
+pytest tests/
 ```
 
 ---

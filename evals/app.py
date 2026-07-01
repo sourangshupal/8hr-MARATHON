@@ -40,9 +40,9 @@ st.set_page_config(
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 SCORE_COLORS = {
-    "green":  "#d4edda",
+    "green": "#d4edda",
     "yellow": "#fff3cd",
-    "red":    "#f8d7da",
+    "red": "#f8d7da",
 }
 
 
@@ -106,17 +106,13 @@ golden = st.session_state.golden
 # Header
 # ─────────────────────────────────────────────────────────────────────────────
 st.title("🧪 Enterprise RAG — Evaluation Suite")
-st.caption(
-    "Step 1: Review ground truth → Step 2: Run live pipeline → Step 3: Score with RAGAS"
-)
+st.caption("Step 1: Review ground truth → Step 2: Run live pipeline → Step 3: Score with RAGAS")
 st.divider()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
 # ─────────────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(
-    ["📋 Step 1 — Ground Truth", "🚀 Step 2 — Live Pipeline", "📊 Step 3 — Eval Metrics"]
-)
+tab1, tab2, tab3 = st.tabs(["📋 Step 1 — Ground Truth", "🚀 Step 2 — Live Pipeline", "📊 Step 3 — Eval Metrics"])
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -131,13 +127,15 @@ with tab1:
 
     rag_rows = []
     for s in golden["rag_samples"]:
-        rag_rows.append({
-            "ID": s["id"],
-            "Domain": s["domain"].replace("_", " ").title(),
-            "Question": s["question"],
-            "Reference Answer": s["reference"][:120] + "..." if len(s["reference"]) > 120 else s["reference"],
-            "Expected Tool": s["expected_tools"][0] if s["expected_tools"] else "—",
-        })
+        rag_rows.append(
+            {
+                "ID": s["id"],
+                "Domain": s["domain"].replace("_", " ").title(),
+                "Question": s["question"],
+                "Reference Answer": s["reference"][:120] + "..." if len(s["reference"]) > 120 else s["reference"],
+                "Expected Tool": s["expected_tools"][0] if s["expected_tools"] else "—",
+            }
+        )
     df_golden = pd.DataFrame(rag_rows)
     st.dataframe(df_golden, use_container_width=True, hide_index=True)
     st.caption(f"✅ {len(rag_rows)} golden RAG samples from 5 enterprise docs")
@@ -153,13 +151,15 @@ with tab1:
     g_rows = []
     for g in golden["guardrails_samples"]:
         expected_label = "🛡️ Block" if g["expected_blocked"] else "✅ Pass"
-        g_rows.append({
-            "ID": g["id"],
-            "Input": g["input"],
-            "Expected": expected_label,
-            "Type": g["type"],
-            "Description": g["description"],
-        })
+        g_rows.append(
+            {
+                "ID": g["id"],
+                "Input": g["input"],
+                "Expected": expected_label,
+                "Type": g["type"],
+                "Description": g["description"],
+            }
+        )
     st.dataframe(pd.DataFrame(g_rows), use_container_width=True, hide_index=True)
     st.caption("6 guardrails test cases: 3 adversarial (should block) + 3 legit (should pass)")
 
@@ -212,16 +212,18 @@ with tab2:
         def pipeline_cb(i, total, question, stage, response=""):
             pct = int((i / total) * 100)
             if stage == "calling":
-                progress_bar.progress(pct, text=f"[{i+1}/{total}] Calling /query: {question[:60]}...")
+                progress_bar.progress(pct, text=f"[{i + 1}/{total}] Calling /query: {question[:60]}...")
             else:
                 short_q = question[:55] + "..." if len(question) > 55 else question
                 short_r = response[:80] + "..." if len(response) > 80 else response
-                st.session_state.pipeline_rows.append({
-                    "#": i + 1,
-                    "Question": short_q,
-                    "Live Response (truncated)": short_r if short_r else "⚠️ No response",
-                    "Status": "✅" if short_r else "❌",
-                })
+                st.session_state.pipeline_rows.append(
+                    {
+                        "#": i + 1,
+                        "Question": short_q,
+                        "Live Response (truncated)": short_r if short_r else "⚠️ No response",
+                        "Status": "✅" if short_r else "❌",
+                    }
+                )
                 live_table_slot.dataframe(
                     pd.DataFrame(st.session_state.pipeline_rows),
                     use_container_width=True,
@@ -229,7 +231,7 @@ with tab2:
                 )
                 progress_bar.progress(
                     int(((i + 1) / total) * 100),
-                    text=f"[{i+1}/{total}] ✅ Done",
+                    text=f"[{i + 1}/{total}] ✅ Done",
                 )
 
         with logfire.span("🚀 Streamlit — Run Pipeline Button"):
@@ -248,7 +250,7 @@ with tab2:
         def g_cb(i, total, input_text):
             g_progress.progress(
                 int((i / total) * 100),
-                text=f"[{i+1}/{total}] Testing: {input_text[:60]}...",
+                text=f"[{i + 1}/{total}] Testing: {input_text[:60]}...",
             )
 
         with logfire.span("🛡️ Streamlit — Guardrails Tests"):
@@ -262,16 +264,20 @@ with tab2:
         g_rows_live = []
         for r in g_results:
             result_label = {
-                "TP": "🛡️ Blocked ✅", "TN": "✅ Passed ✅",
-                "FP": "🛡️ Blocked ❌ (False Positive)", "FN": "✅ Passed ❌ (Missed)",
+                "TP": "🛡️ Blocked ✅",
+                "TN": "✅ Passed ✅",
+                "FP": "🛡️ Blocked ❌ (False Positive)",
+                "FN": "✅ Passed ❌ (Missed)",
             }.get(r["result"], r["result"])
-            g_rows_live.append({
-                "ID": r["id"],
-                "Input": r["input"][:70],
-                "Expected": "🛡️ Block" if r["expected_blocked"] else "✅ Pass",
-                "Actual": "Blocked" if r["actual_blocked"] else "Passed",
-                "Result": result_label,
-            })
+            g_rows_live.append(
+                {
+                    "ID": r["id"],
+                    "Input": r["input"][:70],
+                    "Expected": "🛡️ Block" if r["expected_blocked"] else "✅ Pass",
+                    "Actual": "Blocked" if r["actual_blocked"] else "Passed",
+                    "Result": result_label,
+                }
+            )
         st.dataframe(pd.DataFrame(g_rows_live), use_container_width=True, hide_index=True)
 
         mc1, mc2, mc3, mc4 = st.columns(4)
@@ -285,14 +291,18 @@ with tab2:
 
         resp_rows = []
         for s in st.session_state.enriched_dataset["rag_samples"]:
-            resp_rows.append({
-                "#": s["id"],
-                "Domain": s["domain"].replace("_", " ").title(),
-                "Question": s["question"][:60],
-                "Live Response": s["actual_response"][:100] + "..." if len(s.get("actual_response","")) > 100 else s.get("actual_response",""),
-                "Tool Called": s["actual_tools_called"][0] if s.get("actual_tools_called") else "—",
-                "Contexts Retrieved": len(s.get("actual_contexts", [])),
-            })
+            resp_rows.append(
+                {
+                    "#": s["id"],
+                    "Domain": s["domain"].replace("_", " ").title(),
+                    "Question": s["question"][:60],
+                    "Live Response": s["actual_response"][:100] + "..."
+                    if len(s.get("actual_response", "")) > 100
+                    else s.get("actual_response", ""),
+                    "Tool Called": s["actual_tools_called"][0] if s.get("actual_tools_called") else "—",
+                    "Contexts Retrieved": len(s.get("actual_contexts", [])),
+                }
+            )
         st.dataframe(pd.DataFrame(resp_rows), use_container_width=True, hide_index=True)
 
         if st.session_state.guardrails_results:
@@ -301,14 +311,18 @@ with tab2:
             g_rows_prev = []
             for r in st.session_state.guardrails_results:
                 result_label = {
-                    "TP": "🛡️ Blocked ✅", "TN": "✅ Passed ✅",
-                    "FP": "Blocked ❌ FP", "FN": "Passed ❌ FN",
+                    "TP": "🛡️ Blocked ✅",
+                    "TN": "✅ Passed ✅",
+                    "FP": "Blocked ❌ FP",
+                    "FN": "Passed ❌ FN",
                 }.get(r["result"], r["result"])
-                g_rows_prev.append({
-                    "ID": r["id"],
-                    "Input": r["input"][:70],
-                    "Result": result_label,
-                })
+                g_rows_prev.append(
+                    {
+                        "ID": r["id"],
+                        "Input": r["input"][:70],
+                        "Result": result_label,
+                    }
+                )
             st.dataframe(pd.DataFrame(g_rows_prev), use_container_width=True, hide_index=True)
             gm = compute_guardrails_metrics(st.session_state.guardrails_results)
             mc1, mc2, mc3, mc4 = st.columns(4)
@@ -350,12 +364,12 @@ with tab3:
             results_slots = {}
 
             metric_display_names = {
-                "faithfulness":      "Exp 1 — Faithfulness",
-                "answer_relevancy":  "Exp 2 — Answer Relevancy",
+                "faithfulness": "Exp 1 — Faithfulness",
+                "answer_relevancy": "Exp 2 — Answer Relevancy",
                 "context_precision": "Exp 3 — Context Precision",
-                "context_recall":    "Exp 4 — Context Recall",
-                "answer_correctness":"Exp 5 — Answer Correctness",
-                "tool_correctness":  "Exp 6 — Tool Correctness",
+                "context_recall": "Exp 4 — Context Recall",
+                "answer_correctness": "Exp 5 — Answer Correctness",
+                "tool_correctness": "Exp 6 — Tool Correctness",
             }
             for key, title in metric_display_names.items():
                 results_slots[key] = st.empty()
@@ -364,9 +378,7 @@ with tab3:
                 status_slot.info(msg)
 
             with logfire.span("📊 Streamlit — Run Metrics Button"):
-                metric_results = _run_async(
-                    run_all_metrics(st.session_state.enriched_dataset, status_cb=status_cb)
-                )
+                metric_results = _run_async(run_all_metrics(st.session_state.enriched_dataset, status_cb=status_cb))
                 st.session_state.metric_results = metric_results
 
             status_slot.success("✅ All 6 experiments complete!")
@@ -379,12 +391,12 @@ with tab3:
         elif st.session_state.metric_results:
             st.success("✅ Metrics already computed. Showing results below.")
             metric_display_names = {
-                "faithfulness":      "Exp 1 — Faithfulness",
-                "answer_relevancy":  "Exp 2 — Answer Relevancy",
+                "faithfulness": "Exp 1 — Faithfulness",
+                "answer_relevancy": "Exp 2 — Answer Relevancy",
                 "context_precision": "Exp 3 — Context Precision",
-                "context_recall":    "Exp 4 — Context Recall",
-                "answer_correctness":"Exp 5 — Answer Correctness",
-                "tool_correctness":  "Exp 6 — Tool Correctness",
+                "context_recall": "Exp 4 — Context Recall",
+                "answer_correctness": "Exp 5 — Answer Correctness",
+                "tool_correctness": "Exp 6 — Tool Correctness",
             }
             for key, title in metric_display_names.items():
                 if key in st.session_state.metric_results:
@@ -397,12 +409,24 @@ with tab3:
 
             mr = st.session_state.metric_results
             summary = [
-                ("Faithfulness",       mr.get("faithfulness",      pd.DataFrame()).get("faithfulness",      pd.Series()).mean()),
-                ("Answer Relevancy",   mr.get("answer_relevancy",  pd.DataFrame()).get("answer_relevancy",  pd.Series()).mean()),
-                ("Context Precision",  mr.get("context_precision", pd.DataFrame()).get("context_precision", pd.Series()).mean()),
-                ("Context Recall",     mr.get("context_recall",    pd.DataFrame()).get("context_recall",    pd.Series()).mean()),
-                ("Answer Correctness", mr.get("answer_correctness",pd.DataFrame()).get("answer_correctness",pd.Series()).mean()),
-                ("Tool Correctness",   mr.get("tool_correctness",  pd.DataFrame()).get("tool_correctness",  pd.Series()).mean()),
+                ("Faithfulness", mr.get("faithfulness", pd.DataFrame()).get("faithfulness", pd.Series()).mean()),
+                (
+                    "Answer Relevancy",
+                    mr.get("answer_relevancy", pd.DataFrame()).get("answer_relevancy", pd.Series()).mean(),
+                ),
+                (
+                    "Context Precision",
+                    mr.get("context_precision", pd.DataFrame()).get("context_precision", pd.Series()).mean(),
+                ),
+                ("Context Recall", mr.get("context_recall", pd.DataFrame()).get("context_recall", pd.Series()).mean()),
+                (
+                    "Answer Correctness",
+                    mr.get("answer_correctness", pd.DataFrame()).get("answer_correctness", pd.Series()).mean(),
+                ),
+                (
+                    "Tool Correctness",
+                    mr.get("tool_correctness", pd.DataFrame()).get("tool_correctness", pd.Series()).mean(),
+                ),
             ]
 
             cols = st.columns(len(summary))
@@ -422,8 +446,14 @@ with tab3:
                     delta=f"Precision {gm['precision']:.2f} | Recall {gm['recall']:.2f}",
                 )
 
-            summary_df = pd.DataFrame([
-                {"Metric": name, "Score": f"{score:.3f}" if pd.notna(score) else "—", "Grade": _grade(score) if pd.notna(score) else "—"}
-                for name, score in summary
-            ])
+            summary_df = pd.DataFrame(
+                [
+                    {
+                        "Metric": name,
+                        "Score": f"{score:.3f}" if pd.notna(score) else "—",
+                        "Grade": _grade(score) if pd.notna(score) else "—",
+                    }
+                    for name, score in summary
+                ]
+            )
             st.dataframe(summary_df, use_container_width=True, hide_index=True)

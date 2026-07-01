@@ -40,17 +40,13 @@ def main() -> dict:
     print("🚀 Running live RAG pipeline...")
     enriched = run_pipeline(
         golden,
-        progress_callback=lambda i, total, question, stage, response="": _print_progress(
-            i, total, stage, question
-        ),
+        progress_callback=lambda i, total, question, stage, response="": _print_progress(i, total, stage, question),
     )
 
     print("🛡️ Running guardrails tests...")
     guardrails_results = run_guardrails_eval(
         enriched["guardrails_samples"],
-        progress_callback=lambda i, total, input_text: _print_progress(
-            i, total, "guardrails", input_text
-        ),
+        progress_callback=lambda i, total, input_text: _print_progress(i, total, "guardrails", input_text),
     )
     guardrails_metrics = compute_guardrails_metrics(guardrails_results)
 

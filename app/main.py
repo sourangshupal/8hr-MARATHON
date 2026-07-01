@@ -105,6 +105,7 @@ class _AppLimiter:
     Allows routes to be decorated at import time while the real limiter
     (Redis-backed or in-memory) is configured in startup_event.
     """
+
     def limit(self, rule_or_callable):
         def decorator(func):
             import functools
@@ -121,6 +122,7 @@ class _AppLimiter:
                 return limiter.limit(rule)(func)(*args, **kwargs)
 
             return wrapper
+
         return decorator
 
 
@@ -133,6 +135,7 @@ def rate_limit(times: int = None, seconds: int = None):
     initialized at startup. Falls back to a no-op if the limiter is missing.
     The rule is resolved at request time so settings can be overridden in tests.
     """
+
     def _resolve_rule() -> str:
         t = times or settings.RATE_LIMIT_PER_MINUTE
         s = seconds or 60
@@ -169,6 +172,7 @@ def startup_event():
 
     if not settings.API_KEY:
         logfire.warning("🔓 RAG_API_KEY is not set — /query is open to anyone. Set it in production.")
+
 
 class QueryRequest(BaseModel):
     q: str

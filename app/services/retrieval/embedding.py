@@ -15,6 +15,7 @@ _model_type: str | None = None  # "gemini" or "fallback"
 
 # ── Model initialisation ───────────────────────────────────────────────────────
 
+
 def _probe_gemini():
     """Try one embed call to verify Gemini is reachable. Returns model or None."""
     try:
@@ -32,6 +33,7 @@ def _probe_gemini():
 
 def _load_fallback():
     from sentence_transformers import SentenceTransformer
+
     logfire.info("Loading sentence-transformers fallback (all-mpnet-base-v2, 768-dim).")
     return SentenceTransformer("all-mpnet-base-v2")
 
@@ -53,6 +55,7 @@ def _init():
 
 # ── Public helpers ─────────────────────────────────────────────────────────────
 
+
 def get_embedding_dim() -> int:
     """Return the vector dimension for the active model. Call after _init()."""
     _init()
@@ -60,6 +63,7 @@ def get_embedding_dim() -> int:
 
 
 # ── Batch embedding with retry ─────────────────────────────────────────────────
+
 
 def _embed_batch(batch: list[str]) -> list[list[float]]:
     if _model_type == "gemini":
@@ -71,11 +75,8 @@ def _embed_batch(batch: list[str]) -> list[list[float]]:
                 err = str(e).lower()
                 is_rate_limit = any(x in err for x in ("429", "rate", "quota", "resource_exhausted"))
                 if is_rate_limit and attempt < 3:
-                    wait = 2 ** attempt
-                    logfire.warning(
-                        f"Gemini rate limit hit — retrying in {wait}s "
-                        f"(attempt {attempt + 1}/4)."
-                    )
+                    wait = 2**attempt
+                    logfire.warning(f"Gemini rate limit hit — retrying in {wait}s (attempt {attempt + 1}/4).")
                     time.sleep(wait)
                 else:
                     logfire.error(f"Gemini embedding failed: {e}")
@@ -86,6 +87,7 @@ def _embed_batch(batch: list[str]) -> list[list[float]]:
 
 
 # ── Public API (same signatures as before) ─────────────────────────────────────
+
 
 def embed_query(query: str) -> list[float]:
     _init()

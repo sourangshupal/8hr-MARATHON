@@ -1,4 +1,5 @@
 """Tests for async /query enqueue and status endpoints."""
+
 from unittest.mock import MagicMock, patch
 
 import celery.result

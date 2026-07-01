@@ -74,14 +74,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     workflow.set_entry_point("planner")
 
     # Conditional Edge: Planner -> Router -> (Retriever OR Responder)
-    workflow.add_conditional_edges(
-        "planner",
-        route_planner,
-        {
-            "retriever": "retriever",
-            "responder": "responder"
-        }
-    )
+    workflow.add_conditional_edges("planner", route_planner, {"retriever": "retriever", "responder": "responder"})
 
     workflow.add_edge("retriever", "responder")
     workflow.add_edge("responder", END)

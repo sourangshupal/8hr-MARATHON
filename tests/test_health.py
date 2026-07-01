@@ -1,4 +1,5 @@
 """Tests for health and readiness endpoints."""
+
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient

@@ -78,7 +78,7 @@ def generate_node(state: AgentState):
                 "final_answer": content,
                 "status": status,
                 "plan": plan_update,
-                "messages": [{"role": "assistant", "content": content}]
+                "messages": [{"role": "assistant", "content": content}],
             }
 
         except Exception as e:
@@ -94,7 +94,4 @@ def generate_node(state: AgentState):
 )
 def _generate_response(prompt: str):
     """Call the LLM gateway with retry logic for transient failures."""
-    return portkey_client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.1
-    )
+    return portkey_client.chat.completions.create(messages=[{"role": "user", "content": prompt}], temperature=0.1)

@@ -1,4 +1,5 @@
 """Celery tasks for running the LangGraph RAG pipeline asynchronously."""
+
 import os
 
 from dotenv import load_dotenv
@@ -36,7 +37,7 @@ celery_app.conf.update(
     task_track_started=True,
     task_result_expires=3600,  # 1 hour
     result_extended=True,
-    task_acks_late=True,           # Ack after task completes so a killed worker can retry.
+    task_acks_late=True,  # Ack after task completes so a killed worker can retry.
     task_reject_on_worker_lost=True,
 )
 
@@ -56,7 +57,9 @@ def run_rag_pipeline(self, query: str, thread_id: str, rag_request_id: str | Non
     Stores the final API-style response as the task result.
     """
     set_request_id(rag_request_id)
-    with logfire.span("🚀 Celery RAG pipeline", task_id=self.request.id, thread_id=thread_id, request_id=rag_request_id):
+    with logfire.span(
+        "🚀 Celery RAG pipeline", task_id=self.request.id, thread_id=thread_id, request_id=rag_request_id
+    ):
         try:
             # Gate 1: NeMo Guardrails
             rail_fired, rail_response = guard(query)
@@ -98,7 +101,7 @@ def run_rag_pipeline(self, query: str, thread_id: str, rag_request_id: str | Non
             # Only retry exceptions that look transient (network/LLM/API issues).
             if not _is_retryable_error(e):
                 raise e
-            raise self.retry(exc=e, countdown=2 ** self.request.retries)
+            raise self.retry(exc=e, countdown=2**self.request.retries)
 
 
 def _is_retryable_error(exc: Exception) -> bool:

@@ -4,7 +4,6 @@ Sends each test input to the live /query API and checks if the guardrail fired.
 Classifies each result as TP / TN / FP / FN and computes precision + recall.
 """
 
-
 import copy
 import time
 
@@ -86,16 +85,17 @@ def compute_guardrails_metrics(results: list) -> dict:
     fn = sum(1 for r in results if r["result"] == "FN")
 
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    accuracy  = (tp + tn) / len(results) if results else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    accuracy = (tp + tn) / len(results) if results else 0.0
 
     return {
-        "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
         "precision": round(precision, 3),
         "recall": round(recall, 3),
         "accuracy": round(accuracy, 3),
         "total": len(results),
         "correct": tp + tn,
     }
-
-

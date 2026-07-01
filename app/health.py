@@ -1,4 +1,5 @@
 """Health and readiness checks for the Enterprise RAG API."""
+
 import logfire
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse

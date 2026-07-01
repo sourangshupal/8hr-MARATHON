@@ -1,4 +1,5 @@
 """Smoke tests for the eval pipeline (no live API required)."""
+
 import importlib.util
 import os
 from unittest.mock import MagicMock, patch
@@ -7,11 +8,13 @@ from unittest.mock import MagicMock, patch
 # (which pulls in ragas and can fail in a minimal test environment).
 _ANGEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
 def _load_module(name, rel_path):
     spec = importlib.util.spec_from_file_location(name, os.path.join(_ANGEL, rel_path))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
 
 pipeline_mod = _load_module("evals.pipeline", "evals/pipeline.py")
 guardrails_mod = _load_module("evals.guardrails_eval", "evals/guardrails_eval.py")

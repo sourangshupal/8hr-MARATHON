@@ -1,4 +1,5 @@
 """Tests for the Prometheus /metrics endpoint."""
+
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient

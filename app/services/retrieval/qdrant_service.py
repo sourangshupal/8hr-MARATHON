@@ -6,10 +6,7 @@ from app.config import settings
 from app.services.retrieval.embedding import embed_query
 
 # Initialize Qdrant Client
-client = QdrantClient(
-    url=settings.QDRANT_URL,
-    api_key=settings.QDRANT_API_KEY
-)
+client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
 
 
 @retry(
@@ -27,16 +24,14 @@ def _search_enterprise_knowledge(query: str, limit: int = 8):
         collection_name=settings.QDRANT_COLLECTION,
         query=query_vector,
         limit=limit,
-        with_payload=True  # JSON
+        with_payload=True,  # JSON
     )
 
     results = []
     for res in response.points:
-        results.append({
-            "content": res.payload.get("text", ""),
-            "source": res.payload.get("source", "Unknown"),
-            "score": res.score
-        })
+        results.append(
+            {"content": res.payload.get("text", ""), "source": res.payload.get("source", "Unknown"), "score": res.score}
+        )
 
     return results
 
