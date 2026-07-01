@@ -227,7 +227,7 @@ def query(
         GUARDRAILS_BLOCKS_TOTAL.labels(blocked="false").inc()
 
         try:
-            task = run_rag_pipeline.delay(q, thread_id, request_id=request_id)
+            task = run_rag_pipeline.delay(q, thread_id, rag_request_id=request_id)
             RAG_REQUESTS_TOTAL.labels(status="queued").inc()
             RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.info(

@@ -15,4 +15,4 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements-prod.txt
 # Copy only the app package — everything else (evals/, ui/, DATA/, DOCS/) stays out
 COPY app/ ./app/
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "5"]

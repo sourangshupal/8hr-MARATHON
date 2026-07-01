@@ -22,10 +22,10 @@ def test_query_returns_job_id():
     assert data["status"] == "queued"
     assert data["poll_url"] == "/query/status/test-job-123"
     assert "request_id" in data
-    # request_id should be passed through to the Celery task.
+    # request_id should be passed through to the Celery task as rag_request_id.
     mock_delay.assert_called_once()
     _, kwargs = mock_delay.call_args
-    assert kwargs.get("request_id") == data["request_id"]
+    assert kwargs.get("rag_request_id") == data["request_id"]
 
 
 def test_query_status_returns_completed_result():

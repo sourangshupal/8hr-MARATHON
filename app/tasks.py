@@ -35,6 +35,8 @@ celery_app.conf.update(
     task_track_started=True,
     task_result_expires=3600,  # 1 hour
     result_extended=True,
+    task_acks_late=True,           # Ack after task completes so a killed worker can retry.
+    task_reject_on_worker_lost=True,
 )
 
 
@@ -47,13 +49,13 @@ def init_worker(**kwargs):
 
 
 @celery_app.task(bind=True, max_retries=3)
-def run_rag_pipeline(self, query: str, thread_id: str, request_id: str | None = None):
+def run_rag_pipeline(self, query: str, thread_id: str, rag_request_id: str | None = None):
     """
     Celery task that runs the full RAG pipeline (guardrails + LangGraph).
     Stores the final API-style response as the task result.
     """
-    set_request_id(request_id)
-    with logfire.span("🚀 Celery RAG pipeline", task_id=self.request.id, thread_id=thread_id, request_id=request_id):
+    set_request_id(rag_request_id)
+    with logfire.span("🚀 Celery RAG pipeline", task_id=self.request.id, thread_id=thread_id, request_id=rag_request_id):
         try:
             # Gate 1: NeMo Guardrails
             rail_fired, rail_response = guard(query)
@@ -92,5 +94,18 @@ def run_rag_pipeline(self, query: str, thread_id: str, request_id: str | None = 
         except Exception as e:
             CELERY_JOBS_TOTAL.labels(status="failure").inc()
             logfire.error(f"❌ Celery RAG pipeline failed: {e}")
-            # Retry on transient failures; raise final exception on last retry.
+            # Only retry exceptions that look transient (network/LLM/API issues).
+            if not _is_retryable_error(e):
+                raise e
             raise self.retry(exc=e, countdown=2 ** self.request.retries)
+
+
+def _is_retryable_error(exc: Exception) -> bool:
+    """Return True for exceptions likely to be transient and worth retrying."""
+    retryable_names = {"APIError", "APIConnectionError", "RateLimitError", "InternalServerError"}
+    exc_type_name = type(exc).__name__
+    if exc_type_name in retryable_names:
+        return True
+    if exc_type_name in {"RequestException", "HTTPError", "Timeout", "ConnectionError"}:
+        return True
+    return False
