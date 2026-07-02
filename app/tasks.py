@@ -1,12 +1,5 @@
 """Celery tasks for running the LangGraph RAG pipeline asynchronously."""
 
-import os
-
-from dotenv import load_dotenv
-
-# Load environment variables before any other app imports.
-load_dotenv()
-
 import logfire
 from celery import Celery
 from celery.signals import worker_process_init
@@ -25,8 +18,8 @@ CELERY_JOBS_TOTAL = Counter(
 # Configure Celery to use Redis as both broker and result backend.
 celery_app = Celery(
     "enterprise_rag",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=settings.celery_broker_url,
+    backend=settings.celery_result_backend,
 )
 
 celery_app.conf.update(
@@ -44,7 +37,7 @@ celery_app.conf.update(
 @worker_process_init.connect
 def init_worker(**kwargs):
     """Initialize guardrails once per Celery worker process."""
-    logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
+    logfire.configure(token=settings.LOGFIRE_TOKEN)
     initialize_rails()
     logfire.info("🛡️ Celery worker initialized guardrails.")
 
