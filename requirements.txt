@@ -26,6 +26,7 @@ langchain-google-vertexai   # Required shim for NeMo Guardrails internal import 
 langchain-community         # Community-contributed tools and loaders
 langchain-openai            # OpenAI-compatible layer (used by Portkey gateway + guardrails)
 pydantic>=2.0.0             # Data validation and settings management
+pydantic-settings           # Pydantic BaseSettings with dotenv support
 
 # --- DATA INGESTION & DOCUMENT PARSING ---
 unstructured                # Base library for DOCX/PPTX partitioning

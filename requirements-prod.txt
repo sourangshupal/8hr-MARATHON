@@ -37,6 +37,7 @@ langchain-google-vertexai==3.2.3
 langchain-community==0.4.1
 langchain-openai==1.2.1
 pydantic==2.13.4
+pydantic-settings==2.9.1
 
 # --- GUARDRAILS ---
 nemoguardrails==0.21.0
