@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # --- API SAFETY ---
     API_KEY: str | None = Field(default=None, alias="RAG_API_KEY")
     RATE_LIMIT_PER_MINUTE: int = 20
+    STRICT_STARTUP: bool = False
 
     # --- OBSERVABILITY ---
     LOGFIRE_TOKEN: str | None = None
