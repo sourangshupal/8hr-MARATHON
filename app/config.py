@@ -90,6 +90,7 @@ class Settings(BaseSettings):
 # Singleton used across the app.
 settings = Settings()
 
+
 def apply_langchain_env():
     """Write LangSmith/LangChain settings to os.environ for automatic tracing."""
     if settings.LANGSMITH_TRACING:
