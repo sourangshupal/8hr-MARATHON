@@ -95,6 +95,8 @@ Fill in the variables. The minimum required keys for local testing are:
 | `JUDGE_OPENAI_API_KEY` | Separate judge key for RAGAS evals | OpenAI platform (falls back to `OPENAI_API_KEY` if blank) |
 | `JINA_API_KEY` | Embeddings (`jina-embeddings-v3`) and reranker (`jina-reranker-v3`) | Jina AI dashboard |
 | `PORTKEY_API_KEY` | LLM gateway routing / retries / caching | Portkey dashboard |
+| `PORTKEY_PRIMARY_SLUG` | Saved config slug for primary LLM (looks like `pc-xxxxxxxx`) | Portkey configs page |
+| `PORTKEY_FALLBACK_SLUG` | Saved config slug for fallback LLM (looks like `pc-yyyyyyyy`) | Portkey configs page |
 | `QDRANT_CLUSTER_ENDPOINT` | Qdrant URL | Qdrant cloud console |
 | `QDRANT_API_KEY` | Qdrant API key | Qdrant cloud console |
 | `NEON_DB_URL` | Postgres connection string for LangGraph checkpointer | Neon console |
@@ -688,6 +690,26 @@ OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES \
 ```
 
 Or run with `--pool=solo`.
+
+### `/ready` shows `llm_gateway` as unavailable
+
+Portkey requires **saved configs** with slugs starting with `pc-...`. Arbitrary names like `marathon-api` will fail with:
+
+```text
+Reference a saved config by its 'pc-...' slug instead
+```
+
+Fix:
+
+1. Go to your Portkey dashboard.
+2. Create a saved config for `gpt-5-mini` (provider: OpenAI).
+3. Create a saved config for `claude-haiku-4-5-20251001` (provider: Anthropic).
+4. Copy the `pc-...` slugs into `.env`:
+
+```env
+PORTKEY_PRIMARY_SLUG=pc-xxxxxxxx
+PORTKEY_FALLBACK_SLUG=pc-yyyyyyyy
+```
 
 ### `/ready` shows Postgres as unavailable
 

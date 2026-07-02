@@ -93,10 +93,12 @@ Store all sensitive values in **AWS Secrets Manager** and inject them into task 
 
 - `QDRANT_COLLECTION=enterprise_rag`
 - `RATE_LIMIT_PER_MINUTE=60`
-- `PORTKEY_PRIMARY_SLUG=marathon-api`
-- `PORTKEY_FALLBACK_SLUG=anthropic-fallback`
+- `PORTKEY_PRIMARY_SLUG=marathon-api` → must be a Portkey saved-config slug like `pc-xxxxxxxx`
+- `PORTKEY_FALLBACK_SLUG=anthropic-fallback` → must be a Portkey saved-config slug like `pc-yyyyyyyy`
 - `STRICT_STARTUP=true` (production only; set to `false` for local development)
 - `PYTHONUNBUFFERED=1`
+
+> **Note on Portkey slugs:** These are not arbitrary names. Create saved configs in Portkey first, then use the `pc-...` slugs it assigns.
 
 > **Note on `STRICT_STARTUP`:** When `true`, the FastAPI server refuses to start if any external dependency (Neon, Upstash, Qdrant, Portkey, Jina) is unreachable. Set to `false` locally so the app starts even if some services are optional.
 

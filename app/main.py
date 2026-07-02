@@ -161,7 +161,19 @@ def startup_event():
     checkpointer = getattr(app.state.rag_agent, "checkpointer", None)
     if checkpointer is not None and hasattr(checkpointer, "setup"):
         try:
-            checkpointer.setup()
+            # LangGraph's setup() issues CREATE INDEX CONCURRENTLY, which fails under
+            # Neon/psycopg when run inside an implicit transaction. We borrow the pool
+            # temporarily, set autocommit, run setup, then release the connection.
+            pool = getattr(checkpointer, "conn", None)
+            if pool is not None:
+                setup_conn = pool.getconn()
+                try:
+                    setup_conn.autocommit = True
+                    checkpointer.setup(setup_conn)
+                finally:
+                    pool.putconn(setup_conn)
+            else:
+                checkpointer.setup()
             logfire.info("🗄️ Postgres checkpointer tables initialized.")
         except Exception as e:
             logfire.error(f"❌ Failed to initialize Postgres checkpointer: {e}")
