@@ -1,7 +1,7 @@
 # AWS ECS Fargate Deployment Plan — Enterprise Agentic RAG
 
 > **Approved approach:** Option A — Managed Qdrant with Fargate-hosted API, Worker, and optional UI.  
-> This plan keeps all stateful services (Redis, Postgres, Qdrant) outside of Fargate for simpler operations and reliable auto-scaling.
+> This plan keeps all stateful services (Redis via Upstash, Postgres via Neon, Qdrant) outside of Fargate for simpler operations and reliable auto-scaling.
 
 ---
 
@@ -10,7 +10,7 @@
 Deploy the Enterprise Agentic RAG application on AWS using **Amazon ECS on Fargate** in a microservices architecture, with:
 
 - Separate scaling for synchronous API traffic and asynchronous RAG jobs
-- Managed persistence for Redis, Postgres, and Qdrant
+- Managed persistence for Postgres (Neon), Redis (Upstash), and Qdrant (Qdrant Cloud)
 - Auto-scaling policies for each compute service
 - A local `docker-compose.yml` for pre-cloud validation
 - CI/CD via GitHub Actions → Amazon ECR → ECS
@@ -33,8 +33,8 @@ All three services use the **same Docker image** from Amazon ECR. Only the comma
 
 | Component | AWS Service | Purpose |
 |---|---|---|
-| **Redis** | Amazon ElastiCache for Redis (serverless or cluster) | Celery broker/backend + FastAPI rate-limit store |
-| **Postgres** | Amazon RDS PostgreSQL or Aurora Serverless v2 | LangGraph checkpointer (conversation memory) |
+| **Redis** | Upstash Redis (managed) | Celery broker/backend + FastAPI rate-limit store |
+| **Postgres** | Neon (managed PostgreSQL) | LangGraph checkpointer (conversation memory) |
 | **Qdrant** | Qdrant Cloud managed service | Vector database for retrieval |
 | **Secrets** | AWS Secrets Manager | API keys, DB URIs, Redis URL |
 | **Ingress** | Application Load Balancer | Public HTTPS access to `rag-api` and `rag-ui` |
@@ -58,17 +58,15 @@ All three services use the **same Docker image** from Amazon ECR. Only the comma
 
 1. **VPC** with public and private subnets across at least 2 Availability Zones.
 2. **Public subnets:** ALB, NAT Gateways.
-3. **Private subnets:** Fargate tasks, ElastiCache, RDS.
+3. **Private subnets:** Fargate tasks only (Neon, Upstash, and Qdrant Cloud are accessed over the public internet via NAT Gateway).
 4. **Security Groups:**
 
 | Security Group | Inbound | Outbound |
 |---|---|---|
 | `alb-sg` | 80/443 from internet | To `api-sg` and `ui-sg` |
-| `api-sg` | 8080 from `alb-sg` | Redis (6379), RDS (5432), Qdrant Cloud (6333), public internet for LLM APIs |
+| `api-sg` | 8080 from `alb-sg` | Public internet for Neon, Upstash, Qdrant Cloud, and LLM APIs |
 | `ui-sg` | 8501 from `alb-sg` | `api-sg` (8080) |
-| `worker-sg` | None (private) | Redis, RDS, Qdrant Cloud, public internet for LLM APIs |
-| `redis-sg` | 6379 from `api-sg`, `worker-sg` | None |
-| `rds-sg` | 5432 from `api-sg`, `worker-sg` | None |
+| `worker-sg` | None (private) | Public internet for Neon, Upstash, Qdrant Cloud, and LLM APIs |
 
 ---
 
@@ -78,8 +76,9 @@ Store all sensitive values in **AWS Secrets Manager** and inject them into task 
 
 ### Secrets (Secrets Manager)
 
-- `REDIS_URL`
-- `POSTGRES_URI`
+- `NEON_DB_URL`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 - `QDRANT_URL`
 - `QDRANT_API_KEY`
 - `OPENAI_API_KEY`
@@ -88,13 +87,12 @@ Store all sensitive values in **AWS Secrets Manager** and inject them into task 
 - `RAG_API_KEY` (production auth)
 - `LOGFIRE_TOKEN`
 - `LANGSMITH_API_KEY`
-- `JUDGE_OPENAI_API_KEY` (optional eval-only key)
+- `JUDGE_OPENAI_API_KEY` (optional) — Dedicated OpenAI key for RAGAS eval judge. Falls back to `OPENAI_API_KEY` if omitted; not required in the ECS API/worker task definitions.
 
 ### Plain environment variables
 
 - `QDRANT_COLLECTION=enterprise_rag`
 - `RATE_LIMIT_PER_MINUTE=60`
-- `LOGFIRE_IGNORE_NO_CONFIG=0`
 - `PYTHONUNBUFFERED=1`
 
 ---
@@ -146,8 +144,9 @@ This runs the container as a non-root user.
         {"name": "PYTHONUNBUFFERED", "value": "1"}
       ],
       "secrets": [
-        {"name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/redis-url"},
-        {"name": "POSTGRES_URI", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/postgres-uri"},
+        {"name": "NEON_DB_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/neon-db-url"},
+        {"name": "UPSTASH_REDIS_REST_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/upstash-redis-rest-url"},
+        {"name": "UPSTASH_REDIS_REST_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/upstash-redis-rest-token"},
         {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
         {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
         {"name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/openai-api-key"},
@@ -193,8 +192,9 @@ Uses the same image, but with larger CPU/memory because it runs embeddings, rera
         {"name": "PYTHONUNBUFFERED", "value": "1"}
       ],
       "secrets": [
-        {"name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/redis-url"},
-        {"name": "POSTGRES_URI", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/postgres-uri"},
+        {"name": "NEON_DB_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/neon-db-url"},
+        {"name": "UPSTASH_REDIS_REST_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/upstash-redis-rest-url"},
+        {"name": "UPSTASH_REDIS_REST_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/upstash-redis-rest-token"},
         {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
         {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
         {"name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/openai-api-key"},
@@ -267,7 +267,7 @@ Target tracking policies:
 
 ### 8.2 rag-worker
 
-Celery uses Redis, so queue depth is not a native CloudWatch metric. Choose one of the following:
+Celery uses Redis via Upstash. Upstash manages the Redis cluster, so no Redis-specific scaling infrastructure is required.
 
 **Option A — Custom CloudWatch metric (recommended):**
 
@@ -276,8 +276,7 @@ Celery uses Redis, so queue depth is not a native CloudWatch metric. Choose one 
 
 **Option B — Switch Celery broker to Amazon SQS:**
 
-- Change `REDIS_URL` to an SQS URL.
-- Use the native `ApproximateNumberOfMessagesVisible` metric for target tracking.
+- This is outside the scope of this plan. If you choose SQS later, change the Celery broker URL and use the native `ApproximateNumberOfMessagesVisible` metric for target tracking.
 
 **Scale:** min 1, max 20 tasks.
 
@@ -300,29 +299,6 @@ Use this file to validate the full stack locally before deploying to AWS.
 version: "3.8"
 
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: enterprise_rag
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   qdrant:
     image: qdrant/qdrant:latest
     ports:
@@ -340,19 +316,14 @@ services:
     ports:
       - "8000:8080"
     environment:
-      REDIS_URL: redis://redis:6379/0
-      POSTGRES_URI: postgresql://postgres:postgres@postgres:5432/enterprise_rag
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ""
       QDRANT_COLLECTION: enterprise_rag
       RATE_LIMIT_PER_MINUTE: "60"
       RAG_API_KEY: ""
-      LOGFIRE_IGNORE_NO_CONFIG: "1"
     env_file:
       - .env
     depends_on:
-      - redis
-      - postgres
       - qdrant
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 
@@ -361,18 +332,13 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      REDIS_URL: redis://redis:6379/0
-      POSTGRES_URI: postgresql://postgres:postgres@postgres:5432/enterprise_rag
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ""
       QDRANT_COLLECTION: enterprise_rag
       RAG_API_KEY: ""
-      LOGFIRE_IGNORE_NO_CONFIG: "1"
     env_file:
       - .env
     depends_on:
-      - redis
-      - postgres
       - qdrant
     command: ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "2"]
 
@@ -389,8 +355,6 @@ services:
     command: ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
 
 volumes:
-  redis-data:
-  postgres-data:
   qdrant-data:
 ```
 
@@ -431,8 +395,9 @@ Set these in **Settings → Secrets and variables → Actions**:
 | `ECS_SERVICE_API` | ECS service name for API (default: `rag-api`) |
 | `ECS_SERVICE_WORKER` | ECS service name for worker (default: `rag-worker`) |
 | `ECS_SERVICE_UI` | ECS service name for UI (default: `rag-ui`) |
-| `REDIS_URL_ARN` | Secrets Manager ARN for `REDIS_URL` |
-| `POSTGRES_URI_ARN` | Secrets Manager ARN for `POSTGRES_URI` |
+| `NEON_DB_URL_ARN` | Secrets Manager ARN for `NEON_DB_URL` |
+| `UPSTASH_REDIS_REST_URL_ARN` | Secrets Manager ARN for `UPSTASH_REDIS_REST_URL` |
+| `UPSTASH_REDIS_REST_TOKEN_ARN` | Secrets Manager ARN for `UPSTASH_REDIS_REST_TOKEN` |
 | `QDRANT_URL_ARN` | Secrets Manager ARN for `QDRANT_URL` |
 | `QDRANT_API_KEY_ARN` | Secrets Manager ARN for `QDRANT_API_KEY` |
 | `OPENAI_API_KEY_ARN` | Secrets Manager ARN for `OPENAI_API_KEY` |
@@ -481,8 +446,6 @@ If using S3, download files into the task's ephemeral storage before running the
 2. **CloudWatch Alarms:**
    - `rag-api` 5xx error rate > 1%
    - `rag-worker` task failures > threshold
-   - RDS CPU utilization > 80%
-   - ElastiCache memory utilization > 80%
 3. **Prometheus:** scrape `/metrics` from `rag-api`. Use Amazon Managed Prometheus or a self-hosted Prometheus sidecar.
 4. **Custom dashboard metrics:**
    - Celery queue length
@@ -496,8 +459,7 @@ If using S3, download files into the task's ephemeral storage before running the
 ## 13. Cost & Operational Notes
 
 - **Fargate** is easy to operate but more expensive per vCPU than EC2. For steady high throughput, consider EC2-backed ECS or EKS.
-- **ElastiCache Serverless** is simplest; a provisioned cluster is cheaper for predictable load.
-- **Aurora Serverless v2** is best for variable Postgres load; provisioned RDS is cheaper for steady load.
+- **Neon** and **Upstash** are managed services that remove operational overhead for Postgres and Redis; pricing is usage-based.
 - **Qdrant Cloud** is the simplest vector DB option. Only self-host Qdrant if data residency requirements demand it.
 - Keep `requirements-prod.txt` lean. Do not include `streamlit`, `ragas`, `sentence-transformers`, or `deepeval` in the production image unless required.
 
@@ -506,7 +468,7 @@ If using S3, download files into the task's ephemeral storage before running the
 ## 14. Deployment Sequence
 
 1. Create VPC, public/private subnets, IGW, NAT Gateways, and security groups.
-2. Create ElastiCache Redis and RDS Postgres (or Aurora).
+2. Sign up for Neon PostgreSQL and Upstash Redis; copy connection strings.
 3. Sign up for Qdrant Cloud and create the `enterprise_rag` collection.
 4. Create ECR repository and push the Docker image.
 5. Create Secrets Manager entries for all environment variables.

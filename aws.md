@@ -1,7 +1,7 @@
 # AWS Infrastructure Setup Guide — Enterprise Agentic RAG
 
 > **Scope:** Build the full AWS backend for the `deployment` branch using the AWS CLI.  
-> **Approach:** Option A — managed Qdrant Cloud, ElastiCache Serverless Redis, RDS PostgreSQL, ECS Fargate, and Application Load Balancer.
+> **Approach:** Option A — managed Qdrant Cloud, Neon PostgreSQL, Upstash Redis, ECS Fargate, and Application Load Balancer.
 
 Run the commands from a terminal with an IAM user that has **AdministratorAccess** (or equivalent). AWS CLI v2 and `jq` are required.
 
@@ -13,22 +13,21 @@ Run the commands from a terminal with an IAM user that has **AdministratorAccess
 2. [Variables](#2-variables)
 3. [VPC & Networking](#3-vpc--networking)
 4. [Security Groups](#4-security-groups)
-5. [ElastiCache Redis](#5-elasticache-redis)
-6. [RDS PostgreSQL](#6-rds-postgresql)
-7. [Qdrant Cloud](#7-qdrant-cloud)
-8. [ECR Repository](#8-ecr-repository)
-9. [CloudWatch Log Groups](#9-cloudwatch-log-groups)
-10. [Secrets Manager](#10-secrets-manager)
-11. [IAM Roles](#11-iam-roles)
-12. [ECS Cluster](#12-ecs-cluster)
-13. [Task Definitions](#13-task-definitions)
-14. [Application Load Balancer](#14-application-load-balancer)
-15. [ECS Services](#15-ecs-services)
-16. [Auto Scaling](#16-auto-scaling)
-17. [GitHub Secrets](#17-github-secrets)
-18. [Push & Trigger CI/CD](#18-push--trigger-cicd)
-19. [Validation](#19-validation)
-20. [Cleanup](#20-cleanup)
+5. [Neon PostgreSQL + Upstash Redis](#5-neon-postgresql--upstash-redis)
+6. [Qdrant Cloud](#6-qdrant-cloud)
+7. [ECR Repository](#7-ecr-repository)
+8. [CloudWatch Log Groups](#8-cloudwatch-log-groups)
+9. [Secrets Manager](#9-secrets-manager)
+10. [IAM Roles](#10-iam-roles)
+11. [ECS Cluster](#11-ecs-cluster)
+12. [Task Definitions](#12-task-definitions)
+13. [Application Load Balancer](#13-application-load-balancer)
+14. [ECS Services](#14-ecs-services)
+15. [Auto Scaling](#15-auto-scaling)
+16. [GitHub Secrets](#16-github-secrets)
+17. [Push & Trigger CI/CD](#17-push--trigger-cicd)
+18. [Validation](#18-validation)
+19. [Cleanup](#19-cleanup)
 
 ---
 
@@ -65,8 +64,6 @@ export VPC_NAME="${PROJECT}-vpc"
 export ALB_NAME="${PROJECT}-alb"
 export ECR_REPO="enterprise-rag"
 export ECS_CLUSTER="${PROJECT}-cluster"
-export RDS_INSTANCE="${PROJECT}-postgres"
-export REDIS_CACHE="${PROJECT}-redis"
 ```
 
 ---
@@ -83,7 +80,7 @@ export VPC_ID=$(aws ec2 create-vpc \
   --output text)
 echo "VPC_ID=$VPC_ID"
 
-# Enable DNS hostnames (required for ALB and RDS)
+# Enable DNS hostnames (required for ALB and service endpoints)
 aws ec2 modify-vpc-attribute \
   --vpc-id $VPC_ID \
   --enable-dns-hostnames
@@ -288,152 +285,51 @@ aws ec2 authorize-security-group-ingress \
   --port 8501 \
   --source-group $ALB_SG
 
-# Redis security group
-export REDIS_SG=$(aws ec2 create-security-group \
-  --group-name "${PROJECT}-redis-sg" \
-  --description "ElastiCache Redis security group" \
-  --vpc-id $VPC_ID \
-  --query 'GroupId' \
-  --output text)
-
-aws ec2 authorize-security-group-ingress \
-  --group-id $REDIS_SG \
-  --protocol tcp \
-  --port 6379 \
-  --source-group $API_SG
-
-aws ec2 authorize-security-group-ingress \
-  --group-id $REDIS_SG \
-  --protocol tcp \
-  --port 6379 \
-  --source-group $WORKER_SG
-
-# RDS security group
-export RDS_SG=$(aws ec2 create-security-group \
-  --group-name "${PROJECT}-rds-sg" \
-  --description "RDS PostgreSQL security group" \
-  --vpc-id $VPC_ID \
-  --query 'GroupId' \
-  --output text)
-
-aws ec2 authorize-security-group-ingress \
-  --group-id $RDS_SG \
-  --protocol tcp \
-  --port 5432 \
-  --source-group $API_SG
-
-aws ec2 authorize-security-group-ingress \
-  --group-id $RDS_SG \
-  --protocol tcp \
-  --port 5432 \
-  --source-group $WORKER_SG
-
 echo "ALB_SG=$ALB_SG"
 echo "API_SG=$API_SG"
 echo "WORKER_SG=$WORKER_SG"
 echo "UI_SG=$UI_SG"
-echo "REDIS_SG=$REDIS_SG"
-echo "RDS_SG=$RDS_SG"
+```
+
+> **Note:** Neon and Upstash are managed services accessed over HTTPS from the private subnets via the NAT Gateway. No Redis or PostgreSQL security groups are required.
+
+---
+
+## 5. Neon PostgreSQL + Upstash Redis
+
+State is hosted in managed services outside AWS. Create both services in consoles, then export the connection details below.
+
+### 5.1 Neon PostgreSQL
+
+1. Go to [https://console.neon.tech](https://console.neon.tech) and sign up/log in.
+2. Create a new project (choose a region close to your AWS region).
+3. Create a database named `enterprise_rag` (or use the default Neon database).
+4. Copy the PostgreSQL connection string for the database.
+
+Export it locally:
+
+```bash
+export NEON_DB_URL="postgresql://user:password@host.neon.tech/enterprise_rag?sslmode=require"
+```
+
+### 5.2 Upstash Redis
+
+1. Go to [https://console.upstash.com](https://console.upstash.com) and sign up/log in.
+2. Create a new Redis database (choose a region close to your AWS region).
+3. Enable the **REST API** and copy:
+   - **REST URL** (e.g., `https://prompt-amoeba-12345.upstash.io`)
+   - **REST TOKEN**
+
+Export them locally:
+
+```bash
+export UPSTASH_REDIS_REST_URL="https://your-db.upstash.io"
+export UPSTASH_REDIS_REST_TOKEN="your-upstash-rest-token"
 ```
 
 ---
 
-## 5. ElastiCache Redis
-
-### 5.1 Create Cache Subnet Group
-
-```bash
-aws elasticache create-cache-subnet-group \
-  --cache-subnet-group-name "${PROJECT}-redis-subnet-group" \
-  --cache-subnet-group-description "Private subnets for Redis" \
-  --subnet-ids "[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2]"
-```
-
-### 5.2 Create Serverless Cache
-
-```bash
-aws elasticache create-serverless-cache \
-  --serverless-cache-name $REDIS_CACHE \
-  --engine redis \
-  --major-engine-version 7 \
-  --security-group-ids $REDIS_SG \
-  --subnet-ids "[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2]" \
-  --cache-usage-limits "DataStorage={Maximum=5,Unit=GB},ECPUPerSecond={Maximum=5000}"
-```
-
-Wait until the status is `available`:
-
-```bash
-aws elasticache wait serverless-cache-available \
-  --serverless-cache-name $REDIS_CACHE
-
-export REDIS_ENDPOINT=$(aws elasticache describe-serverless-caches \
-  --serverless-cache-name $REDIS_CACHE \
-  --query 'ServerlessCaches[0].Endpoint.Address' \
-  --output text)
-
-export REDIS_URL="redis://${REDIS_ENDPOINT}:6379/0"
-echo "REDIS_URL=$REDIS_URL"
-```
-
----
-
-## 6. RDS PostgreSQL
-
-### 6.1 Create DB Subnet Group
-
-```bash
-aws rds create-db-subnet-group \
-  --db-subnet-group-name "${PROJECT}-db-subnet-group" \
-  --db-subnet-group-description "Private subnets for RDS" \
-  --subnet-ids "[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2]"
-```
-
-### 6.2 Create DB Instance
-
-Replace `YourStrongPassword123!` with a strong password.
-
-```bash
-export DB_PASSWORD="YourStrongPassword123!"
-
-aws rds create-db-instance \
-  --db-instance-identifier $RDS_INSTANCE \
-  --db-instance-class db.t3.micro \
-  --engine postgres \
-  --engine-version 16.4 \
-  --master-username postgres \
-  --master-user-password $DB_PASSWORD \
-  --allocated-storage 20 \
-  --storage-type gp3 \
-  --db-name enterprise_rag \
-  --db-subnet-group-name "${PROJECT}-db-subnet-group" \
-  --vpc-security-group-ids $RDS_SG \
-  --no-publicly-accessible \
-  --storage-encrypted \
-  --backup-retention-period 7 \
-  --no-deletion-protection
-```
-
-> **Production:** add `--multi-az` and `--deletion-protection`.
-
-Wait for the DB to become available:
-
-```bash
-aws rds wait db-instance-available \
-  --db-instance-identifier $RDS_INSTANCE
-
-export RDS_ENDPOINT=$(aws rds describe-db-instances \
-  --db-instance-identifier $RDS_INSTANCE \
-  --query 'DBInstances[0].Endpoint.Address' \
-  --output text)
-
-export POSTGRES_URI="postgresql://postgres:${DB_PASSWORD}@${RDS_ENDPOINT}:5432/enterprise_rag"
-echo "POSTGRES_URI=$POSTGRES_URI"
-```
-
----
-
-## 7. Qdrant Cloud
+## 6. Qdrant Cloud
 
 Qdrant Cloud cannot be created via AWS CLI. Complete these steps in the Qdrant Cloud console:
 
@@ -453,7 +349,7 @@ export QDRANT_API_KEY="your-qdrant-api-key"
 
 ---
 
-## 8. ECR Repository
+## 7. ECR Repository
 
 ```bash
 aws ecr create-repository \
@@ -486,7 +382,7 @@ aws ecr put-lifecycle-policy \
 
 ---
 
-## 9. CloudWatch Log Groups
+## 8. CloudWatch Log Groups
 
 ```bash
 aws logs create-log-group --log-group-name /ecs/rag-api
@@ -496,21 +392,27 @@ aws logs create-log-group --log-group-name /ecs/rag-ui
 
 ---
 
-## 10. Secrets Manager
+## 9. Secrets Manager
 
 Create one secret per environment variable. These commands use the values you exported earlier.
 
 ```bash
-export REDIS_URL_ARN=$(aws secretsmanager create-secret \
-  --name "${PROJECT}/redis-url" \
-  --description "Redis URL for Celery and rate limiting" \
-  --secret-string "$REDIS_URL" \
+export NEON_DB_URL_ARN=$(aws secretsmanager create-secret \
+  --name "${PROJECT}/neon-db-url" \
+  --description "Neon PostgreSQL connection string for LangGraph checkpointer" \
+  --secret-string "$NEON_DB_URL" \
   --query 'ARN' --output text)
 
-export POSTGRES_URI_ARN=$(aws secretsmanager create-secret \
-  --name "${PROJECT}/postgres-uri" \
-  --description "Postgres URI for LangGraph checkpointer" \
-  --secret-string "$POSTGRES_URI" \
+export UPSTASH_REDIS_REST_URL_ARN=$(aws secretsmanager create-secret \
+  --name "${PROJECT}/upstash-redis-rest-url" \
+  --description "Upstash Redis REST URL for Celery and rate limiting" \
+  --secret-string "$UPSTASH_REDIS_REST_URL" \
+  --query 'ARN' --output text)
+
+export UPSTASH_REDIS_REST_TOKEN_ARN=$(aws secretsmanager create-secret \
+  --name "${PROJECT}/upstash-redis-rest-token" \
+  --description "Upstash Redis REST token" \
+  --secret-string "$UPSTASH_REDIS_REST_TOKEN" \
   --query 'ARN' --output text)
 
 export QDRANT_URL_ARN=$(aws secretsmanager create-secret \
@@ -563,8 +465,9 @@ export LANGSMITH_API_KEY_ARN=$(aws secretsmanager create-secret \
   --secret-string "$LANGSMITH_API_KEY" \
   --query 'ARN' --output text)
 
-echo "REDIS_URL_ARN=$REDIS_URL_ARN"
-echo "POSTGRES_URI_ARN=$POSTGRES_URI_ARN"
+echo "NEON_DB_URL_ARN=$NEON_DB_URL_ARN"
+echo "UPSTASH_REDIS_REST_URL_ARN=$UPSTASH_REDIS_REST_URL_ARN"
+echo "UPSTASH_REDIS_REST_TOKEN_ARN=$UPSTASH_REDIS_REST_TOKEN_ARN"
 echo "QDRANT_URL_ARN=$QDRANT_URL_ARN"
 echo "QDRANT_API_KEY_ARN=$QDRANT_API_KEY_ARN"
 echo "OPENAI_API_KEY_ARN=$OPENAI_API_KEY_ARN"
@@ -579,9 +482,9 @@ echo "LANGSMITH_API_KEY_ARN=$LANGSMITH_API_KEY_ARN"
 
 ---
 
-## 11. IAM Roles
+## 10. IAM Roles
 
-### 11.1 Ensure ECS Task Execution Role Exists
+### 10.1 Ensure ECS Task Execution Role Exists
 
 ```bash
 aws iam get-role --role-name ecsTaskExecutionRole >/dev/null 2>&1 || \
@@ -601,7 +504,7 @@ aws iam attach-role-policy \
   --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 ```
 
-### 11.2 Create Task Roles
+### 10.2 Create Task Roles
 
 Create a trust policy file:
 
@@ -644,8 +547,9 @@ cat > /tmp/rag-secrets-policy.json <<EOF
     "Effect": "Allow",
     "Action": ["secretsmanager:GetSecretValue"],
     "Resource": [
-      "$REDIS_URL_ARN",
-      "$POSTGRES_URI_ARN",
+      "$NEON_DB_URL_ARN",
+      "$UPSTASH_REDIS_REST_URL_ARN",
+      "$UPSTASH_REDIS_REST_TOKEN_ARN",
       "$QDRANT_URL_ARN",
       "$QDRANT_API_KEY_ARN",
       "$OPENAI_API_KEY_ARN",
@@ -674,7 +578,7 @@ done
 
 ---
 
-## 12. ECS Cluster
+## 11. ECS Cluster
 
 ```bash
 aws ecs create-cluster \
@@ -686,7 +590,7 @@ aws ecs create-cluster \
 
 ---
 
-## 13. Task Definitions
+## 12. Task Definitions
 
 Render the placeholder task definitions and register them.
 
@@ -697,8 +601,9 @@ render() {
   sed \
     -e "s|<IMAGE_NAME>|$IMAGE_URI|g" \
     -e "s|<AWS_REGION>|$AWS_REGION|g" \
-    -e "s|<REDIS_URL_ARN>|$REDIS_URL_ARN|g" \
-    -e "s|<POSTGRES_URI_ARN>|$POSTGRES_URI_ARN|g" \
+    -e "s|<NEON_DB_URL_ARN>|$NEON_DB_URL_ARN|g" \
+    -e "s|<UPSTASH_REDIS_REST_URL_ARN>|$UPSTASH_REDIS_REST_URL_ARN|g" \
+    -e "s|<UPSTASH_REDIS_REST_TOKEN_ARN>|$UPSTASH_REDIS_REST_TOKEN_ARN|g" \
     -e "s|<QDRANT_URL_ARN>|$QDRANT_URL_ARN|g" \
     -e "s|<QDRANT_API_KEY_ARN>|$QDRANT_API_KEY_ARN|g" \
     -e "s|<OPENAI_API_KEY_ARN>|$OPENAI_API_KEY_ARN|g" \
@@ -736,9 +641,9 @@ echo "RAG_UI_TASK_DEF_ARN=$RAG_UI_TASK_DEF_ARN"
 
 ---
 
-## 14. Application Load Balancer
+## 13. Application Load Balancer
 
-### 14.1 Create ALB
+### 13.1 Create ALB
 
 ```bash
 export ALB_ARN=$(aws elbv2 create-load-balancer \
@@ -758,7 +663,7 @@ export ALB_DNS=$(aws elbv2 describe-load-balancers \
 echo "ALB_DNS=$ALB_DNS"
 ```
 
-### 14.2 Create Target Groups
+### 13.2 Create Target Groups
 
 ```bash
 export API_TG_ARN=$(aws elbv2 create-target-group \
@@ -782,7 +687,7 @@ export UI_TG_ARN=$(aws elbv2 create-target-group \
   --output text)
 ```
 
-### 14.3 Create Listener
+### 13.3 Create Listener
 
 ```bash
 export LISTENER_ARN=$(aws elbv2 create-listener \
@@ -803,9 +708,9 @@ aws elbv2 create-rule \
 
 ---
 
-## 15. ECS Services
+## 14. ECS Services
 
-### 15.1 API Service
+### 14.1 API Service
 
 ```bash
 aws ecs create-service \
@@ -821,7 +726,7 @@ aws ecs create-service \
   --deployment-configuration "minimumHealthyPercent=100,maximumPercent=200"
 ```
 
-### 15.2 Worker Service
+### 14.2 Worker Service
 
 ```bash
 aws ecs create-service \
@@ -835,7 +740,7 @@ aws ecs create-service \
   --deployment-configuration "minimumHealthyPercent=0,maximumPercent=100"
 ```
 
-### 15.3 UI Service
+### 14.3 UI Service
 
 ```bash
 aws ecs create-service \
@@ -853,9 +758,9 @@ aws ecs create-service \
 
 ---
 
-## 16. Auto Scaling
+## 15. Auto Scaling
 
-### 16.1 API Auto Scaling
+### 15.1 API Auto Scaling
 
 ```bash
 aws application-autoscaling register-scalable-target \
@@ -885,7 +790,7 @@ aws application-autoscaling put-scaling-policy \
 
 > **Tip:** The `ResourceLabel` format is `app/<alb-name>/<alb-id>/targetgroup/<tg-name>/<tg-id>`. If the command above fails, copy the exact label from the AWS Console (EC2 → Target Groups → Monitoring).
 
-### 16.2 Worker Auto Scaling (CPU)
+### 15.2 Worker Auto Scaling (CPU)
 
 ```bash
 aws application-autoscaling register-scalable-target \
@@ -910,7 +815,7 @@ aws application-autoscaling put-scaling-policy \
   }'
 ```
 
-### 16.3 UI Auto Scaling (optional)
+### 15.3 UI Auto Scaling (optional)
 
 ```bash
 aws application-autoscaling register-scalable-target \
@@ -937,7 +842,7 @@ aws application-autoscaling put-scaling-policy \
 
 ---
 
-## 17. GitHub Secrets
+## 16. GitHub Secrets
 
 Install the GitHub CLI and authenticate:
 
@@ -963,9 +868,10 @@ gh secret set ECS_SERVICE_API          --body "rag-api"
 gh secret set ECS_SERVICE_WORKER       --body "rag-worker"
 gh secret set ECS_SERVICE_UI           --body "rag-ui"
 
-gh secret set REDIS_URL_ARN            --body "$REDIS_URL_ARN"
-gh secret set POSTGRES_URI_ARN         --body "$POSTGRES_URI_ARN"
-gh secret set QDRANT_URL_ARN           --body "$QDRANT_URL_ARN"
+gh secret set NEON_DB_URL_ARN             --body "$NEON_DB_URL_ARN"
+gh secret set UPSTASH_REDIS_REST_URL_ARN  --body "$UPSTASH_REDIS_REST_URL_ARN"
+gh secret set UPSTASH_REDIS_REST_TOKEN_ARN --body "$UPSTASH_REDIS_REST_TOKEN_ARN"
+gh secret set QDRANT_URL_ARN             --body "$QDRANT_URL_ARN"
 gh secret set QDRANT_API_KEY_ARN       --body "$QDRANT_API_KEY_ARN"
 gh secret set OPENAI_API_KEY_ARN       --body "$OPENAI_API_KEY_ARN"
 gh secret set JINA_API_KEY_ARN         --body "$JINA_API_KEY_ARN"
@@ -983,7 +889,7 @@ gh secret list
 
 ---
 
-## 18. Push & Trigger CI/CD
+## 17. Push & Trigger CI/CD
 
 From the project root, on the `deployment` branch:
 
@@ -1009,7 +915,7 @@ aws ecs describe-services \
 
 ---
 
-## 19. Validation
+## 18. Validation
 
 Once services are stable, test the deployment:
 
@@ -1041,7 +947,7 @@ aws logs tail /ecs/rag-worker --follow
 
 ---
 
-## 20. Cleanup
+## 19. Cleanup
 
 Run these commands in order to avoid dependency errors.
 
@@ -1068,27 +974,15 @@ aws elbv2 delete-target-group --target-group-arn $UI_TG_ARN
 # 4. Delete ECS cluster
 aws ecs delete-cluster --cluster $ECS_CLUSTER
 
-# 5. Delete ElastiCache
-aws elasticache delete-serverless-cache --serverless-cache-name $REDIS_CACHE
-aws elasticache delete-cache-subnet-group --cache-subnet-group-name "${PROJECT}-redis-subnet-group"
-
-# 6. Delete RDS instance (this creates a final snapshot unless --skip-final-snapshot)
-aws rds delete-db-instance \
-  --db-instance-identifier $RDS_INSTANCE \
-  --skip-final-snapshot \
-  --delete-automated-backups
-
-aws rds delete-db-subnet-group --db-subnet-group-name "${PROJECT}-db-subnet-group"
-
-# 7. Delete ECR repository
+# 5. Delete ECR repository
 aws ecr delete-repository --repository-name $ECR_REPO --force
 
-# 8. Delete Secrets Manager secrets
-for NAME in redis-url postgres-uri qdrant-url qdrant-api-key groq-api-key gemini-api-key portkey-api-key rag-api-key logfire-token langsmith-api-key; do
+# 6. Delete Secrets Manager secrets
+for NAME in neon-db-url upstash-redis-rest-url upstash-redis-rest-token qdrant-url qdrant-api-key openai-api-key jina-api-key portkey-api-key rag-api-key logfire-token langsmith-api-key; do
   aws secretsmanager delete-secret --secret-id "${PROJECT}/${NAME}" --force-delete-without-recovery
 done
 
-# 9. Delete IAM policy and roles
+# 7. Delete IAM policy and roles
 aws iam detach-role-policy --role-name rag-api-task-role --policy-arn $SECRETS_POLICY_ARN
 aws iam detach-role-policy --role-name rag-worker-task-role --policy-arn $SECRETS_POLICY_ARN
 aws iam detach-role-policy --role-name rag-ui-task-role --policy-arn $SECRETS_POLICY_ARN
@@ -1098,16 +992,16 @@ for ROLE in rag-api-task-role rag-worker-task-role rag-ui-task-role; do
   aws iam delete-role --role-name $ROLE
 done
 
-# 10. Delete CloudWatch log groups
+# 8. Delete CloudWatch log groups
 aws logs delete-log-group --log-group-name /ecs/rag-api
 aws logs delete-log-group --log-group-name /ecs/rag-worker
 aws logs delete-log-group --log-group-name /ecs/rag-ui
 
-# 11. Delete NAT gateway and Elastic IP
+# 9. Delete NAT gateway and Elastic IP
 aws ec2 delete-nat-gateway --nat-gateway-id $NAT_GW_1
 aws ec2 release-address --allocation-id $EIP_1
 
-# 12. Delete route tables, subnets, IGW, VPC
+# 10. Delete route tables, subnets, IGW, VPC
 aws ec2 delete-route-table --route-table-id $PUBLIC_RT
 aws ec2 delete-route-table --route-table-id $PRIVATE_RT
 
@@ -1122,4 +1016,4 @@ aws ec2 delete-internet-gateway --internet-gateway-id $IGW_ID
 aws ec2 delete-vpc --vpc-id $VPC_ID
 ```
 
-> **Warning:** Cleanup deletes data. If you want to keep the RDS database, remove `--skip-final-snapshot` and retain the snapshot.
+> **Warning:** Cleanup deletes AWS resources. Neon and Upstash databases must be deleted separately in their respective consoles if you no longer need them.
