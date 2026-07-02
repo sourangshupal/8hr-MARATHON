@@ -103,8 +103,8 @@ def _check_portkey_gateway() -> ConnectionResult:
     try:
         resp = portkey_client.chat.completions.create(
             model=f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini",
-            messages=[{"role": "user", "content": "hi"}],
-            max_completion_tokens=50,
+            messages=[{"role": "user", "content": "Say hello in one word."}],
+            max_completion_tokens=100,
             timeout=10,
         )
         if resp.choices and resp.choices[0].message.content is not None:

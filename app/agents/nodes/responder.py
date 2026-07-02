@@ -2,6 +2,7 @@ import logfire
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from app.agents.state import AgentState
+from app.config import settings
 from app.gateway import extract_cache_status, portkey_client
 
 
@@ -94,4 +95,7 @@ def generate_node(state: AgentState):
 )
 def _generate_response(prompt: str):
     """Call the LLM gateway with retry logic for transient failures."""
-    return portkey_client.chat.completions.create(messages=[{"role": "user", "content": prompt}], temperature=0.1)
+    return portkey_client.chat.completions.create(
+        model=f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
