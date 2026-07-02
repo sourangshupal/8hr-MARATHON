@@ -4,21 +4,32 @@ from portkey_ai import PORTKEY_GATEWAY_URL, Portkey, createHeaders
 
 from app.config import settings
 
-# Production gateway config:
-#   - Fallback: primary @marathon-api/gpt-5-mini -> @anthropic-fallback/claude-haiku-4-5-20251001 on failure
-#   - Cache: semantic mode (requires Portkey Enterprise — silently falls back to simple on free/starter)
-#   - Retry: 2 attempts on rate limit / server error before triggering the fallback target
-GATEWAY_CONFIG = {
-    "strategy": {"mode": "fallback"},
-    "cache": {"mode": "simple"},
-    "retry": {"attempts": 2, "on_status_codes": [429, 503]},
-    "targets": [
-        {"override_params": {"model": f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini"}},
-        {"override_params": {"model": f"@{settings.PORTKEY_FALLBACK_SLUG}/claude-haiku-4-5-20251001"}},
-    ],
-}
+# Portkey routing strategy:
+#   - Primary/fallback logic lives in a Portkey saved config (required when
+#     block_inline_config is enabled on the workspace).
+#   - We reference that config via x-portkey-config-id or @slug/model headers.
+#   - The simple "config dict" approach is disabled for this account, so all
+#     retry/fallback/cache behavior must be configured inside the Portkey UI.
 
-portkey_client = Portkey(api_key=settings.PORTKEY_API_KEY, config=GATEWAY_CONFIG)
+
+def _make_headers(feature: str = "rag") -> dict:
+    """Build Portkey headers that reference a saved config by slug."""
+    return createHeaders(
+        api_key=settings.PORTKEY_API_KEY,
+        config=settings.PORTKEY_PRIMARY_SLUG,
+        metadata={
+            "feature": feature,
+            "_user": "rag-system",
+            "environment": "production",
+        },
+    )
+
+
+# Native Portkey client backed by the saved config slug.
+portkey_client = Portkey(
+    api_key=settings.PORTKEY_API_KEY,
+    config=settings.PORTKEY_PRIMARY_SLUG,
+)
 
 
 def get_langchain_llm(feature: str = "rag") -> ChatOpenAI:
@@ -28,19 +39,15 @@ def get_langchain_llm(feature: str = "rag") -> ChatOpenAI:
     Why ChatOpenAI:
       Portkey is a proxy. It exposes an OpenAI-compatible endpoint at PORTKEY_GATEWAY_URL.
       ChatOpenAI supports base_url (points at Portkey) and default_headers (passes Portkey
-      auth + config). The @slug/model-name format is Portkey-specific — the upstream
-      provider's own client does not understand it. Portkey is just in the middle.
+      auth + saved-config reference). The @slug/model-name format is Portkey-specific — the
+      upstream provider's own client does not understand it. Portkey is just in the middle.
     """
     return ChatOpenAI(
         api_key=settings.PORTKEY_API_KEY,
         base_url=PORTKEY_GATEWAY_URL,
         model=f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini",
         temperature=0,
-        default_headers=createHeaders(
-            api_key=settings.PORTKEY_API_KEY,
-            config=GATEWAY_CONFIG,
-            metadata={"feature": feature, "_user": "rag-system", "environment": "production"},
-        ),
+        default_headers=_make_headers(feature),
     )
 
 
@@ -52,15 +59,7 @@ def get_async_openai_client(feature: str = "rag") -> AsyncOpenAI:
     return AsyncOpenAI(
         api_key=settings.PORTKEY_API_KEY,
         base_url=PORTKEY_GATEWAY_URL,
-        default_headers=createHeaders(
-            api_key=settings.PORTKEY_API_KEY,
-            config=GATEWAY_CONFIG,
-            metadata={
-                "feature": feature,
-                "_user": "rag-system",
-                "environment": "production",
-            },
-        ),
+        default_headers=_make_headers(feature),
     )
 
 

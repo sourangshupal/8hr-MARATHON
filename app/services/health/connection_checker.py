@@ -102,7 +102,7 @@ def _check_portkey_gateway() -> ConnectionResult:
     try:
         resp = portkey_client.chat.completions.create(
             messages=[{"role": "user", "content": "hi"}],
-            max_tokens=1,
+            max_completion_tokens=1,
             temperature=0,
             timeout=10,
         )
