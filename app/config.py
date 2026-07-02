@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     PORTKEY_API_KEY: str
     PORTKEY_PRIMARY_SLUG: str = "marathon-api"
     PORTKEY_FALLBACK_SLUG: str = "anthropic-fallback"
+    # Portkey saved configs are referenced by their system-generated `pc-...` ID,
+    # not the human-readable slug shown in the UI. If these are unset, fall back
+    # to the slug value (works only on workspaces that allow slug lookup).
+    PORTKEY_PRIMARY_CONFIG_ID: str | None = None
+    PORTKEY_FALLBACK_CONFIG_ID: str | None = None
 
     # --- QDRANT VECTOR DB ---
     QDRANT_URL: str = Field(alias="QDRANT_CLUSTER_ENDPOINT")
@@ -61,6 +66,16 @@ class Settings(BaseSettings):
     def judge_api_key(self) -> str:
         """Dedicated judge key, falling back to the main OpenAI key."""
         return self.JUDGE_OPENAI_API_KEY or self.OPENAI_API_KEY
+
+    @property
+    def portkey_primary_config_id(self) -> str:
+        """Effective saved-config ID for the primary Portkey config."""
+        return self.PORTKEY_PRIMARY_CONFIG_ID or self.PORTKEY_PRIMARY_SLUG
+
+    @property
+    def portkey_fallback_config_id(self) -> str:
+        """Effective saved-config ID for the fallback Portkey config."""
+        return self.PORTKEY_FALLBACK_CONFIG_ID or self.PORTKEY_FALLBACK_SLUG
 
     @property
     def postgres_uri(self) -> str:

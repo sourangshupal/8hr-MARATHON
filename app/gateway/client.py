@@ -12,11 +12,16 @@ from app.config import settings
 #     retry/fallback/cache behavior must be configured inside the Portkey UI.
 
 
-def _make_headers(feature: str = "rag") -> dict:
-    """Build Portkey headers that reference a saved config by its slug/id."""
+def _make_headers(feature: str = "rag", fallback: bool = False) -> dict:
+    """Build Portkey headers that reference a saved config by its system ID."""
+    config_id = (
+        settings.portkey_fallback_config_id
+        if fallback
+        else settings.portkey_primary_config_id
+    )
     return createHeaders(
         api_key=settings.PORTKEY_API_KEY,
-        config_id=settings.PORTKEY_PRIMARY_SLUG,
+        config_id=config_id,
         metadata={
             "feature": feature,
             "_user": "rag-system",

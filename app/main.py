@@ -157,15 +157,6 @@ def startup_event():
     # Build the agent graph with the production checkpointer (Postgres by default).
     app.state.rag_agent = build_graph()
 
-    # Ensure Postgres checkpointer tables exist.
-    checkpointer = getattr(app.state.rag_agent, "checkpointer", None)
-    if checkpointer is not None and hasattr(checkpointer, "setup"):
-        try:
-            checkpointer.setup()
-            logfire.info("🗄️ Postgres checkpointer tables initialized.")
-        except Exception as e:
-            logfire.error(f"❌ Failed to initialize Postgres checkpointer: {e}")
-
     app.state.rate_limiter_enabled = _init_rate_limiter()
 
     # Verify all external dependencies are reachable.

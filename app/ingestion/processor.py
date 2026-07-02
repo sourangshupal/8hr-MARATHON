@@ -16,10 +16,11 @@ from app.services.retrieval.embedding import embed_texts, get_embedding_dim
 
 # Configure Logfire only when a token is available so ingestion can run locally
 # without a Logfire project. Match the main app's behavior.
-logfire.configure(
-    token=settings.LOGFIRE_TOKEN,
-    service_name="enterprise-ingestion-service",
-)
+if settings.LOGFIRE_TOKEN:
+    logfire.configure(
+        token=settings.LOGFIRE_TOKEN,
+        service_name="enterprise-ingestion-service",
+    )
 
 # Local folder where parsed + chunked JSON metadata is saved (replaces GCS processed bucket)
 PROCESSED_DATA_DIR = "processed_data"
