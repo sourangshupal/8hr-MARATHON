@@ -2,13 +2,11 @@
 # CRITICAL: logfire MUST be configured before ALL other imports
 # so that spans from all modules are captured from the start.
 # ============================================================
-import os
-
 import logfire
-from dotenv import load_dotenv
 
-load_dotenv()
-logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
+from app.config import settings
+
+logfire.configure(token=settings.LOGFIRE_TOKEN)
 
 # Now safe to import app modules - logfire is already active
 import time
@@ -23,7 +21,6 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from app.agents.graph import build_graph
-from app.config import settings
 from app.guardrails import guard, initialize_rails
 from app.health import router as health_router
 from app.logging import set_request_id
