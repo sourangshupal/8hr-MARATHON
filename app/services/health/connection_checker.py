@@ -101,9 +101,9 @@ def _check_portkey_gateway() -> ConnectionResult:
     """Verify Portkey LLM gateway responds to a minimal completion."""
     try:
         resp = portkey_client.chat.completions.create(
+            model=f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini",
             messages=[{"role": "user", "content": "hi"}],
-            max_completion_tokens=1,
-            temperature=0,
+            max_completion_tokens=50,
             timeout=10,
         )
         if resp.choices and resp.choices[0].message.content is not None:
