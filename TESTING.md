@@ -58,8 +58,8 @@ Required for local testing:
 | `REDIS_URL` | Celery broker + backend | `redis://localhost:6379/0` |
 | `POSTGRES_URI` | Checkpointer (optional) | `postgresql://postgres:postgres@localhost:5432/enterprise_rag` |
 | `RAG_API_KEY` | Bearer auth for `/query` | Leave blank to disable auth locally |
-| `GROQ_API_KEY` | Guardrails + RAG LLM | From Groq console |
-| `GEMINI_API_KEY` | Embeddings | From Google AI Studio |
+| `OPENAI_API_KEY` | Guardrails + RAG LLM | From OpenAI platform |
+| `JINA_API_KEY` | Embeddings + reranking | From Jina AI |
 | `PORTKEY_API_KEY` | LLM gateway | From Portkey console |
 | `QDRANT_URL` / `QDRANT_API_KEY` | Vector DB | Cloud endpoint |
 | `LOGFIRE_TOKEN` | Observability | Optional for local runs |

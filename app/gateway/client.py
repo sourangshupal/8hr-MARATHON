@@ -5,7 +5,7 @@ from portkey_ai import PORTKEY_GATEWAY_URL, Portkey, createHeaders
 from app.config import settings
 
 # Production gateway config:
-#   - Fallback: primary @rag/llama-3.3-70b-versatile → @brag/llama-3.1-8b-instant on failure
+#   - Fallback: primary @marathon-api/gpt-5-mini -> @anthropic-fallback/claude-haiku-4-5-20251001 on failure
 #   - Cache: semantic mode (requires Portkey Enterprise — silently falls back to simple on free/starter)
 #   - Retry: 2 attempts on rate limit / server error before triggering the fallback target
 GATEWAY_CONFIG = {
@@ -13,8 +13,8 @@ GATEWAY_CONFIG = {
     "cache": {"mode": "simple"},
     "retry": {"attempts": 2, "on_status_codes": [429, 503]},
     "targets": [
-        {"override_params": {"model": f"@{settings.GROQ_SLUG}/llama-3.3-70b-versatile"}},
-        {"override_params": {"model": f"@{settings.GROQ_SLUG_2}/llama-3.1-8b-instant"}},
+        {"override_params": {"model": f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini"}},
+        {"override_params": {"model": f"@{settings.PORTKEY_FALLBACK_SLUG}/claude-haiku-4-5-20251001"}},
     ],
 }
 
@@ -23,19 +23,18 @@ portkey_client = Portkey(api_key=settings.PORTKEY_API_KEY, config=GATEWAY_CONFIG
 
 def get_langchain_llm(feature: str = "rag") -> ChatOpenAI:
     """
-    Returns a Portkey-backed ChatOpenAI — a drop-in for ChatGroq in LangChain nodes.
+    Returns a Portkey-backed ChatOpenAI — a drop-in for LangChain nodes.
 
-    Why ChatOpenAI and not ChatGroq:
+    Why ChatOpenAI:
       Portkey is a proxy. It exposes an OpenAI-compatible endpoint at PORTKEY_GATEWAY_URL.
-      ChatGroq is hardwired to Groq's API and does not support routing through a proxy.
       ChatOpenAI supports base_url (points at Portkey) and default_headers (passes Portkey
-      auth + config). The @rag/model-name format is Portkey-specific — Groq's own client
-      does not understand it. You are still using Groq models; Portkey is just in the middle.
+      auth + config). The @slug/model-name format is Portkey-specific — the upstream
+      provider's own client does not understand it. Portkey is just in the middle.
     """
     return ChatOpenAI(
         api_key=settings.PORTKEY_API_KEY,
         base_url=PORTKEY_GATEWAY_URL,
-        model=f"@{settings.GROQ_SLUG}/llama-3.3-70b-versatile",
+        model=f"@{settings.PORTKEY_PRIMARY_SLUG}/gpt-5-mini",
         temperature=0,
         default_headers=createHeaders(
             api_key=settings.PORTKEY_API_KEY,

@@ -526,21 +526,21 @@ export QDRANT_API_KEY_ARN=$(aws secretsmanager create-secret \
   --query 'ARN' --output text)
 
 # Repeat for the remaining secrets. Set the values first, then run create-secret.
-export GROQ_API_KEY="your-groq-key"
-export GEMINI_API_KEY="your-gemini-key"
+export OPENAI_API_KEY="your-openai-key"
+export JINA_API_KEY="your-jina-key"
 export PORTKEY_API_KEY="your-portkey-key"
 export RAG_API_KEY="your-production-api-key"
 export LOGFIRE_TOKEN="your-logfire-token"
 export LANGSMITH_API_KEY="your-langsmith-key"
 
-export GROQ_API_KEY_ARN=$(aws secretsmanager create-secret \
-  --name "${PROJECT}/groq-api-key" \
-  --secret-string "$GROQ_API_KEY" \
+export OPENAI_API_KEY_ARN=$(aws secretsmanager create-secret \
+  --name "${PROJECT}/openai-api-key" \
+  --secret-string "$OPENAI_API_KEY" \
   --query 'ARN' --output text)
 
-export GEMINI_API_KEY_ARN=$(aws secretsmanager create-secret \
-  --name "${PROJECT}/gemini-api-key" \
-  --secret-string "$GEMINI_API_KEY" \
+export JINA_API_KEY_ARN=$(aws secretsmanager create-secret \
+  --name "${PROJECT}/jina-api-key" \
+  --secret-string "$JINA_API_KEY" \
   --query 'ARN' --output text)
 
 export PORTKEY_API_KEY_ARN=$(aws secretsmanager create-secret \
@@ -567,8 +567,8 @@ echo "REDIS_URL_ARN=$REDIS_URL_ARN"
 echo "POSTGRES_URI_ARN=$POSTGRES_URI_ARN"
 echo "QDRANT_URL_ARN=$QDRANT_URL_ARN"
 echo "QDRANT_API_KEY_ARN=$QDRANT_API_KEY_ARN"
-echo "GROQ_API_KEY_ARN=$GROQ_API_KEY_ARN"
-echo "GEMINI_API_KEY_ARN=$GEMINI_API_KEY_ARN"
+echo "OPENAI_API_KEY_ARN=$OPENAI_API_KEY_ARN"
+echo "JINA_API_KEY_ARN=$JINA_API_KEY_ARN"
 echo "PORTKEY_API_KEY_ARN=$PORTKEY_API_KEY_ARN"
 echo "RAG_API_KEY_ARN=$RAG_API_KEY_ARN"
 echo "LOGFIRE_TOKEN_ARN=$LOGFIRE_TOKEN_ARN"
@@ -648,8 +648,8 @@ cat > /tmp/rag-secrets-policy.json <<EOF
       "$POSTGRES_URI_ARN",
       "$QDRANT_URL_ARN",
       "$QDRANT_API_KEY_ARN",
-      "$GROQ_API_KEY_ARN",
-      "$GEMINI_API_KEY_ARN",
+      "$OPENAI_API_KEY_ARN",
+      "$JINA_API_KEY_ARN",
       "$PORTKEY_API_KEY_ARN",
       "$RAG_API_KEY_ARN",
       "$LOGFIRE_TOKEN_ARN",
@@ -701,8 +701,8 @@ render() {
     -e "s|<POSTGRES_URI_ARN>|$POSTGRES_URI_ARN|g" \
     -e "s|<QDRANT_URL_ARN>|$QDRANT_URL_ARN|g" \
     -e "s|<QDRANT_API_KEY_ARN>|$QDRANT_API_KEY_ARN|g" \
-    -e "s|<GROQ_API_KEY_ARN>|$GROQ_API_KEY_ARN|g" \
-    -e "s|<GEMINI_API_KEY_ARN>|$GEMINI_API_KEY_ARN|g" \
+    -e "s|<OPENAI_API_KEY_ARN>|$OPENAI_API_KEY_ARN|g" \
+    -e "s|<JINA_API_KEY_ARN>|$JINA_API_KEY_ARN|g" \
     -e "s|<PORTKEY_API_KEY_ARN>|$PORTKEY_API_KEY_ARN|g" \
     -e "s|<RAG_API_KEY_ARN>|$RAG_API_KEY_ARN|g" \
     -e "s|<LOGFIRE_TOKEN_ARN>|$LOGFIRE_TOKEN_ARN|g" \
@@ -967,8 +967,8 @@ gh secret set REDIS_URL_ARN            --body "$REDIS_URL_ARN"
 gh secret set POSTGRES_URI_ARN         --body "$POSTGRES_URI_ARN"
 gh secret set QDRANT_URL_ARN           --body "$QDRANT_URL_ARN"
 gh secret set QDRANT_API_KEY_ARN       --body "$QDRANT_API_KEY_ARN"
-gh secret set GROQ_API_KEY_ARN         --body "$GROQ_API_KEY_ARN"
-gh secret set GEMINI_API_KEY_ARN       --body "$GEMINI_API_KEY_ARN"
+gh secret set OPENAI_API_KEY_ARN       --body "$OPENAI_API_KEY_ARN"
+gh secret set JINA_API_KEY_ARN         --body "$JINA_API_KEY_ARN"
 gh secret set PORTKEY_API_KEY_ARN      --body "$PORTKEY_API_KEY_ARN"
 gh secret set RAG_API_KEY_ARN          --body "$RAG_API_KEY_ARN"
 gh secret set LOGFIRE_TOKEN_ARN        --body "$LOGFIRE_TOKEN_ARN"

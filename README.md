@@ -1,14 +1,14 @@
 # Enterprise Agentic RAG (Scalable Pipeline)
 
-A production-grade, enterprise-level RAG system built with **LangGraph**, **Portkey LLM Gateway**, and **Gemini Embeddings**. The system distinguishes between technical "True Data" and random "Noisy Data" using semantic re-ranking, history-aware planning, and NeMo Guardrails for input/output safety.
+A production-grade, enterprise-level RAG system built with **LangGraph**, **Portkey LLM Gateway**, **OpenAI**, and **Jina AI Embeddings/Reranker**. The system distinguishes between technical "True Data" and random "Noisy Data" using semantic re-ranking, history-aware planning, and NeMo Guardrails for input/output safety.
 
 ## Key Features
 
 - **Agentic Intelligence**: LangGraph for cyclic reasoning, multi-step planning, and conversation memory.
 - **Guardrails**: NeMo Guardrails gate blocks off-topic, jailbreak, and injection inputs before any retrieval.
-- **LLM Gateway**: Portkey routes all LLM calls with automatic fallback between primary and backup Groq keys.
-- **Enterprise Search**: Qdrant Cloud for high-performance vector search + FlashRank for local semantic reranking.
-- **Gemini Embeddings**: Google `gemini-embedding-2-preview` (3072-dim) via `langchain-google-genai`.
+- **LLM Gateway**: Portkey routes all LLM calls with automatic fallback between OpenAI and Anthropic via your configured Portkey virtual providers.
+- **Enterprise Search**: Qdrant Cloud for high-performance vector search + Jina AI Reranker API for semantic reranking.
+- **Jina AI Embeddings**: `jina-embeddings-v3` (1024-dim) via Jina API, with local `mxbai-embed-large-v1` fallback.
 - **Local Document Parsing**: PDF, HTML, TXT, DOCX, PPTX parsed entirely on-device — no external OCR service.
 - **Observability**: Full trace nesting with **Pydantic Logfire** and **LangSmith** across every agent node.
 - **Metrics**: Prometheus `/metrics` endpoint with custom RAG, guardrails, and Celery counters.
@@ -29,7 +29,7 @@ graph TD
     Guard -->|Pass| Planner{Planner Node}
     Planner -->|Conversational| Responder[Responder Node]
     Planner -->|Technical| Retriever[Retriever Node]
-    Retriever --> Reranker[FlashRank Local Reranker]
+    Retriever --> Reranker[Jina AI Reranker API]
     Reranker --> Responder
     Responder --> UI
     Responder -.-> Memory[(LangGraph MemorySaver)]
@@ -49,7 +49,7 @@ graph TD
 │   │   ├── chunking/    # Paragraph-based text splitter (1500 char max)
 │   │   └── loaders/     # Local parsers — PDF (pypdf), HTML, TXT, DOCX, PPTX
 │   ├── services/
-│   │   └── retrieval/   # Gemini embeddings + Qdrant search + FlashRank reranking
+│   │   └── retrieval/   # Jina AI embeddings + Qdrant search + Jina AI reranking
 │   ├── config.py        # Centralized environment variable management
 │   └── main.py          # FastAPI entrypoint — guardrails gate + /query endpoint
 ├── evals/               # RAGAS evaluation suite + Streamlit 3-tab demo
@@ -68,11 +68,11 @@ graph TD
 | Layer | Technology |
 |-------|-----------|
 | Orchestration | LangChain + LangGraph |
-| LLMs | Groq (Llama 3.3 70B) via **Portkey** gateway |
+| LLMs | OpenAI `gpt-5-mini` + Anthropic fallback via **Portkey** gateway |
 | Guardrails | NeMo Guardrails |
 | Vector DB | Qdrant Cloud |
-| Reranking | FlashRank (local, zero-latency) |
-| Embeddings | Gemini `gemini-embedding-2-preview` (3072-dim) |
+| Reranking | Jina AI Reranker API (`jina-reranker-v3`) |
+| Embeddings | Jina AI `jina-embeddings-v3` (1024-dim) + local mxbai fallback |
 | Document Parsing | pypdf + pdfplumber (local, no OCR service) |
 | Observability | Pydantic Logfire + LangSmith |
 | Evaluation | RAGAS + custom Tool Correctness (Jaccard) |
@@ -94,15 +94,14 @@ pip install -r requirements.txt
 Create a `.env` file with the following keys:
 
 ```env
-# LLMs
-GROQ_API_KEY = "..."
-GROQ_FALLBACK_API_KEY = "..."       # second Groq key, or same as primary
+# OpenAI LLM
+OPENAI_API_KEY = "..."
 
 # LLM Gateway
 PORTKEY_API_KEY = "..."
 
-# Gemini Embeddings
-GEMINI_API_KEY = "..."
+# Jina AI Embeddings + Reranker API
+JINA_API_KEY = "..."
 
 # Vector DB
 QDRANT_API_KEY = "..."
@@ -124,7 +123,7 @@ LANGSMITH_TRACING = true
 LANGSMITH_ENDPOINT = https://api.smith.langchain.com
 
 # Evals
-JUDGE_GROQ = "..."
+JUDGE_OPENAI_API_KEY = "..."
 
 # Backend (for Streamlit UI)
 BACKEND_URL = "http://localhost:8000"

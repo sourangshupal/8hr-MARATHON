@@ -1,26 +1,62 @@
 import time
 
 import logfire
-from flashrank import Ranker, RerankRequest
+import requests
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
-# Lazy initialization - Ranker is loaded on first use to ensure logfire.configure() has run
+from app.config import settings
+
+_JINA_RERANK_URL = "https://api.jina.ai/v1/rerank"
+_JINA_RERANK_MODEL = "jina-reranker-v3"
+
 _ranker = None
 
 
-def _get_ranker() -> Ranker:
-    """
-    Initializes the FlashRank engine lazily.
-    FlashRank uses a local ONNX model (ms-marco-MiniLM-L-6-v2) for ultra-fast reranking.
-    """
+class _JinaReranker:
+    """Thin wrapper around the Jina Reranker API."""
+
+    def rerank(self, query: str, documents: list[str], top_n: int) -> list[str]:
+        """Score and reorder documents against the query via the Jina API."""
+        response = requests.post(
+            _JINA_RERANK_URL,
+            headers={
+                "Authorization": f"Bearer {settings.JINA_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": _JINA_RERANK_MODEL,
+                "query": query,
+                "documents": documents,
+                "top_n": top_n,
+                "return_documents": True,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+        results = payload.get("results", [])
+        # Results are already sorted by relevance_score descending
+        reranked_docs = []
+        for res in results[:top_n]:
+            doc_text = res.get("document")
+            if doc_text is None:
+                # Fallback to original index if document text is missing
+                index = res.get("index")
+                if index is not None and 0 <= index < len(documents):
+                    doc_text = documents[index]
+            if doc_text is not None:
+                reranked_docs.append(doc_text)
+
+        return reranked_docs
+
+
+def _get_ranker() -> _JinaReranker:
+    """Returns the Jina Reranker wrapper (lazy singleton)."""
     global _ranker
     if _ranker is None:
-        logfire.info("🧠 Initializing FlashRank Model (TinyBERT) locally...")
-        try:
-            # We use a specific cache directory to avoid permission issues in production
-            _ranker = Ranker(cache_dir="/tmp/flashrank")
-        except Exception:
-            _ranker = Ranker()
+        logfire.info("🧠 Initializing Jina Reranker v3 via API...")
+        _ranker = _JinaReranker()
     return _ranker
 
 
@@ -31,21 +67,9 @@ def _get_ranker() -> Ranker:
     before_sleep=before_sleep_log(logfire, "warning"),
 )
 def _rerank(query: str, documents: list[str], top_n: int) -> list[str]:
-    """Core FlashRank reranking with retry on transient failures."""
+    """Core Jina API reranking with retry on transient failures."""
     ranker = _get_ranker()
-
-    # FlashRank expects a list of dictionaries with 'id' and 'text'
-    passages = [{"id": i, "text": doc} for i, doc in enumerate(documents)]
-
-    request = RerankRequest(query=query, passages=passages)
-    results = ranker.rerank(request)
-
-    # Results are returned sorted by highest semantic score first
-    reranked_docs = []
-    for res in results[:top_n]:
-        reranked_docs.append(res["text"])
-
-    return reranked_docs
+    return ranker.rerank(query, documents, top_n)
 
 
 def rerank_documents(query: str, documents: list[str], top_n: int = 5) -> list[str]:
@@ -57,8 +81,12 @@ def rerank_documents(query: str, documents: list[str], top_n: int = 5) -> list[s
     if not documents:
         return []
 
+    if not settings.JINA_API_KEY:
+        logfire.warning("⚠️ JINA_API_KEY not set — skipping reranking.")
+        return documents[:top_n]
+
     start_time = time.time()
-    logfire.info(f"📡 [Reranker] Sending {len(documents)} docs to FlashRank Cross-Encoder...")
+    logfire.info(f"📡 [Reranker] Sending {len(documents)} docs to Jina Reranker API...")
 
     try:
         reranked_docs = _rerank(query, documents, top_n)

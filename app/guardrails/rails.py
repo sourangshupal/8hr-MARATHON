@@ -1,5 +1,5 @@
 import logfire
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from nemoguardrails import LLMRails, RailsConfig
 
 from app.config import settings
@@ -11,17 +11,16 @@ _rails: LLMRails | None = None
 def initialize_rails() -> None:
     """
     Build the NeMo LLMRails singleton at app startup.
-    Uses llama-3.1-8b-instant for fast intent classification at the gate —
-    the heavier llama-3.3-70b-versatile is reserved for the RAG pipeline.
+    Uses OpenAI gpt-5-mini for fast intent classification at the gate.
     """
     global _rails
 
-    guard_llm = ChatGroq(api_key=settings.GROQ_API_KEY, model="llama-3.1-8b-instant", temperature=0)
+    guard_llm = ChatOpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-5-mini", temperature=0)
 
     config = RailsConfig.from_content(colang_content=COLANG_CONTENT, yaml_content=YAML_CONTENT)
 
     _rails = LLMRails(config, llm=guard_llm)
-    logfire.info("🛡️ NeMo Guardrails initialised (llama-3.1-8b-instant).")
+    logfire.info("🛡️ NeMo Guardrails initialised (gpt-5-mini).")
 
 
 def guard(message: str) -> tuple[bool, str | None]:

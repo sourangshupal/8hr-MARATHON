@@ -1,7 +1,7 @@
 # ==============================================================================
 # PRODUCTION REQUIREMENTS — Cloud Run only (pinned versions from local venv)
-# Eval/local-only packages (ragas, deepeval, sentence-transformers, streamlit)
-# are excluded — they pull PyTorch and cause build timeouts.
+# Eval/local-only packages (ragas, deepeval, streamlit) are excluded where possible.
+# sentence-transformers + torch are kept for the mxbai local embedding fallback.
 # Full local deps → requirements.txt
 # ==============================================================================
 
@@ -23,14 +23,17 @@ sqlalchemy==2.0.49
 
 # --- VECTOR DB & RETRIEVAL ---
 qdrant-client==1.17.1
-FlashRank==0.2.10
 redis==7.4.0
+
+# --- JINA API EMBEDDINGS + LOCAL FALLBACK ---
+# sentence-transformers pulls torch; needed for the mxbai local fallback path.
+sentence-transformers==3.2.1
+torch==2.5.1
 
 # --- LANGCHAIN & AGENTIC ORCHESTRATION ---
 langchain==1.2.18
 langgraph==1.1.10
 langchain-google-vertexai==3.2.3
-langchain-groq==1.1.2
 langchain-community==0.4.1
 langchain-openai==1.2.1
 pydantic==2.13.4

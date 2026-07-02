@@ -30,15 +30,15 @@ graph LR
     subgraph RETRIEVAL ["🔎  Retrieval Layer"]
         direction TB
         QD[("🗄️ Qdrant Cloud\nVector DB")]
-        FR["⚡ FlashRank\nLocal Reranker"]
+        FR["⚡ Jina Reranker\nAPI · jina-reranker-v3"]
     end
 
     %% ── LLM Gateway ──────────────────────────────────────────────────────────
     subgraph GATEWAY ["🌐  LLM Gateway"]
         direction TB
         PK["🔀 Portkey\nUnified Gateway"]
-        G1["🦙 Groq Primary\nLlama 3.3 · 70B"]
-        G2["🦙 Groq Fallback\nLlama 3.1 · 8B"]
+        G1["🤖 OpenAI Primary\ngpt-5-mini · via Portkey"]
+        G2["🤖 Anthropic Fallback\nclaude-haiku-4-5 · via Portkey"]
     end
 
     %% ── Ingestion ────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ graph LR
         direction TB
         LOADER["Document Loaders\nPDF · HTML · DOCX · PPTX · TXT"]
         PARSED[("📁 processed_data/\nLocal JSON Chunks")]
-        EMB["🔢 Gemini Embeddings\ngemini-embedding-2-preview · 3072-dim"]
+        EMB["🔢 Jina Embeddings\njina-embeddings-v3 · 1024-dim · API"]
     end
 
     %% ── Observability ────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ graph LR
         GD[("📋 Golden Dataset\n15 Samples · 6 Guardrail Tests")]
         RAGAS["RAGAS Metrics\nFaithfulness · Relevancy\nPrecision · Recall · Correctness"]
         TC["Tool Correctness\nJaccard · Zero LLM"]
-        JUDGE["⚖️ Judge LLM\nGroq · JUDGE_GROQ Key"]
+        JUDGE["⚖️ Judge LLM\nOpenAI · JUDGE_OPENAI_API_KEY"]
     end
 
     %% ── Main Query Flow ──────────────────────────────────────────────────────
@@ -149,17 +149,17 @@ graph TB
     subgraph KNOWLEDGE ["4. Knowledge & LLMs"]
         direction LR
         QD[("🗄️ Qdrant Cloud\nVector DB")]
-        FR["⚡ FlashRank\nLocal Reranker"]
+        FR["⚡ Jina Reranker\nAPI · jina-reranker-v3"]
         PK["🔀 Portkey Gateway\nRouting + Fallback"]
-        G1["🦙 Groq Primary\nLlama 3.3 · 70B"]
-        G2["🦙 Groq Fallback\nLlama 3.1 · 8B"]
+        G1["🤖 OpenAI Primary\ngpt-5-mini · via Portkey"]
+        G2["🤖 Anthropic Fallback\nclaude-haiku-4-5 · via Portkey"]
     end
 
     subgraph INGEST ["5. Data Ingestion"]
         direction LR
         LOAD["Document Loaders\nPDF · HTML · DOCX · PPTX · TXT"]
         PROC[("📁 processed_data/\nLocal JSON Chunks")]
-        EMB["🔢 Gemini Embeddings\ngemini-embedding-2-preview · 3072-dim"]
+        EMB["🔢 Jina Embeddings\njina-embeddings-v3 · 1024-dim · API"]
     end
 
     subgraph EVALS ["6. Evaluation Suite  —  RAGAS"]
@@ -167,7 +167,7 @@ graph TB
         GD[("📋 Golden Dataset\n15 RAG Samples · 6 Guardrail Tests")]
         RAGAS["RAGAS Metrics\nFaithfulness · Relevancy · Precision\nRecall · Correctness"]
         TC["Tool Correctness\nJaccard · Zero LLM Cost"]
-        JG["⚖️ Judge LLM\nGroq · Separate Key"]
+        JG["⚖️ Judge LLM\nOpenAI · Separate Key"]
     end
 
     subgraph OBS ["7. Monitoring & Observability"]
@@ -237,9 +237,9 @@ graph TB
     A["🖥️ 1. Streamlit UI\nChat + Eval App"]
     B["⚡ 2. FastAPI + 🛡️ NeMo Guardrails"]
     C["🧠 3. LangGraph Agent\nPlanner → Retriever → Responder"]
-    D["🗄️ 4. Qdrant Cloud\n+ FlashRank Reranker"]
-    E["🌐 5. Portkey Gateway\nGroq Llama 3.3 70B · Fallback 8B"]
-    F["📥 6. Data Ingestion\nLocal Parsers · Gemini Embeddings · processed_data/"]
+    D["🗄️ 4. Qdrant Cloud\n+ Jina AI Reranker"]
+    E["🌐 5. Portkey Gateway\nOpenAI gpt-5-mini · Anthropic Fallback"]
+    F["📥 6. Data Ingestion\nLocal Parsers · Jina Embeddings · processed_data/"]
     G["🧪 7. RAGAS Evals\nFaithfulness · Precision · Recall · Correctness"]
     H["📡 8. Monitoring\nLogfire · LangSmith"]
 

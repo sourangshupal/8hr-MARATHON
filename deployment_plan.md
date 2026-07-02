@@ -82,13 +82,13 @@ Store all sensitive values in **AWS Secrets Manager** and inject them into task 
 - `POSTGRES_URI`
 - `QDRANT_URL`
 - `QDRANT_API_KEY`
-- `GROQ_API_KEY`
-- `GROQ_FALLBACK_API_KEY` (optional)
-- `GEMINI_API_KEY`
+- `OPENAI_API_KEY`
+- `JINA_API_KEY`
 - `PORTKEY_API_KEY`
 - `RAG_API_KEY` (production auth)
 - `LOGFIRE_TOKEN`
 - `LANGSMITH_API_KEY`
+- `JUDGE_OPENAI_API_KEY` (optional eval-only key)
 
 ### Plain environment variables
 
@@ -150,8 +150,8 @@ This runs the container as a non-root user.
         {"name": "POSTGRES_URI", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/postgres-uri"},
         {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
         {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
-        {"name": "GROQ_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/groq-api-key"},
-        {"name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/gemini-api-key"},
+        {"name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/openai-api-key"},
+        {"name": "JINA_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/jina-api-key"},
         {"name": "PORTKEY_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/portkey-api-key"},
         {"name": "RAG_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/rag-api-key"},
         {"name": "LOGFIRE_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/logfire-token"},
@@ -197,8 +197,8 @@ Uses the same image, but with larger CPU/memory because it runs embeddings, rera
         {"name": "POSTGRES_URI", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/postgres-uri"},
         {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
         {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
-        {"name": "GROQ_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/groq-api-key"},
-        {"name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/gemini-api-key"},
+        {"name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/openai-api-key"},
+        {"name": "JINA_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/jina-api-key"},
         {"name": "PORTKEY_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/portkey-api-key"},
         {"name": "RAG_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/rag-api-key"},
         {"name": "LOGFIRE_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/logfire-token"},
@@ -435,8 +435,8 @@ Set these in **Settings → Secrets and variables → Actions**:
 | `POSTGRES_URI_ARN` | Secrets Manager ARN for `POSTGRES_URI` |
 | `QDRANT_URL_ARN` | Secrets Manager ARN for `QDRANT_URL` |
 | `QDRANT_API_KEY_ARN` | Secrets Manager ARN for `QDRANT_API_KEY` |
-| `GROQ_API_KEY_ARN` | Secrets Manager ARN for `GROQ_API_KEY` |
-| `GEMINI_API_KEY_ARN` | Secrets Manager ARN for `GEMINI_API_KEY` |
+| `OPENAI_API_KEY_ARN` | Secrets Manager ARN for `OPENAI_API_KEY` |
+| `JINA_API_KEY_ARN` | Secrets Manager ARN for `JINA_API_KEY` |
 | `PORTKEY_API_KEY_ARN` | Secrets Manager ARN for `PORTKEY_API_KEY` |
 | `RAG_API_KEY_ARN` | Secrets Manager ARN for `RAG_API_KEY` |
 | `LOGFIRE_TOKEN_ARN` | Secrets Manager ARN for `LOGFIRE_TOKEN` |

@@ -12,21 +12,19 @@ numpy                       # Numerical processing
 pytz                        # Timezone handling for logs
 nest-asyncio                # Support for nested async loops in notebooks/streamlit
 
-# --- GEMINI EMBEDDINGS ---
-google-generativeai         # Gemini API — embeddings (text-embedding-004 / gemini-embedding-001)
-langchain-google-genai      # LangChain integration for Gemini models
+# --- JINA API EMBEDDINGS + LOCAL FALLBACK ---
+sentence-transformers       # Local fallback embeddings (mxbai-embed-large-v1)
+torch                        # Required by sentence-transformers
 
 # --- VECTOR DB & RETRIEVAL ---
 qdrant-client               # Vector Database for semantic search
-flashrank                   # Ultra-fast local cross-encoder for semantic reranking
 
 # --- LANGCHAIN & AGENTIC ORCHESTRATION ---
 langchain                   # Core LLM orchestration
 langgraph                   # State-machine logic for cyclic agent flows
-langchain-groq              # Integration for lightning-fast Llama 3.3 models
 langchain-google-vertexai   # Required shim for NeMo Guardrails internal import (no GCP credentials needed)
 langchain-community         # Community-contributed tools and loaders
-langchain-openai            # OpenAI-compatible layer (used by Portkey gateway)
+langchain-openai            # OpenAI-compatible layer (used by Portkey gateway + guardrails)
 pydantic>=2.0.0             # Data validation and settings management
 
 # --- DATA INGESTION & DOCUMENT PARSING ---
@@ -69,7 +67,4 @@ deepeval                    # Pytest-compatible test runner wrapping RAGAS & saf
 langfuse                    # Live production monitoring, tracing & user feedback collection
 
 # --- EMBEDDINGS (SENTENCE TRANSFORMERS) ---
-sentence-transformers       # Used by FlashRank reranker internally
-langchain_google_genai
-
-langchain-google-vertexai
+sentence-transformers       # Local fallback embeddings (mxbai-embed-large-v1)

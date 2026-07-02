@@ -1,8 +1,8 @@
 """
 Phase 2 — RAGAS + Tool Correctness metrics.
-Uses JUDGE_GROQ key so production GROQ_API_KEY is never exhausted by eval runs.
-All LLM-based metrics run in batches of 5 with 30s cooldowns between sub-batches
-and 60s cooldowns between experiments — calibrated for Groq's 6,000 TPM on_demand tier.
+Uses a dedicated OpenAI judge key so production OPENAI_API_KEY is never exhausted by eval runs.
+All LLM-based metrics run one sample at a time with short cooldowns between sub-batches
+and experiments as a conservative rate-limit buffer.
 Contexts are truncated to 300 chars (2 chunks max) so no single request exceeds the limit.
 """
 
@@ -22,19 +22,19 @@ from ragas.metrics.collections import (
     Faithfulness,
 )
 
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-JUDGE_MODEL = "llama-3.1-8b-instant"
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+JUDGE_MODEL = "gpt-5-mini"
 COOLDOWN_STANDARD = 62
-COOLDOWN_MINI = 40  # between individual samples — lets sliding TPM window recover (~2,800 tok/sample)
+COOLDOWN_MINI = 40  # between individual samples — conservative rate-limit buffer
 GENERAL_BATCH_SIZE = 1  # one sample at a time: abatch_score fires calls concurrently per sample,
 # so batch>1 stacks multiple samples' async calls inside the same second
-CONTEXT_TRUNCATE = 300  # chars per context chunk — reduces single request from ~7,700 to ~400 tokens
+CONTEXT_TRUNCATE = 300  # chars per context chunk — reduces single request token count
 CONTEXT_LIMIT = 2  # number of context chunks passed to RAGAS per sample
 
 
 def _build_judge():
-    api_key = os.getenv("JUDGE_GROQ") or os.getenv("GROQ_API_KEY")
-    client = AsyncOpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
+    api_key = os.getenv("JUDGE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    client = AsyncOpenAI(api_key=api_key, base_url=OPENAI_BASE_URL)
     llm = llm_factory(JUDGE_MODEL, provider="openai", client=client)
     embeddings = HuggingFaceEmbeddings(
         model="sentence-transformers/all-MiniLM-L6-v2",
@@ -44,7 +44,7 @@ def _build_judge():
 
 
 async def _cooldown(seconds: int, label: str, status_cb=None):
-    msg = f"⏳ {seconds}s cooldown after {label} (Groq TPM buffer)..."
+    msg = f"⏳ {seconds}s cooldown after {label} (rate-limit buffer)..."
     if status_cb:
         status_cb(msg)
     for _ in range(seconds // 10):
@@ -57,9 +57,7 @@ def _prep_samples(golden_dataset: dict) -> list:
     """
     Returns only samples with actual_response populated.
     Truncates contexts to CONTEXT_TRUNCATE chars and limits to CONTEXT_LIMIT chunks
-    so a single RAGAS LLM call stays well under the 6,000 TPM ceiling.
-    (Live contexts from Qdrant are ~1,500 chars each — without truncation a single
-    Faithfulness request exceeds 7,000 tokens which hard-fails on the on_demand tier.)
+    so a single RAGAS LLM call stays small and fast.
     """
     valid = []
     for s in golden_dataset["rag_samples"]:
@@ -81,7 +79,7 @@ def _score_df(metric_key: str, samples: list, scores) -> pd.DataFrame:
 async def _batched_score(metric, inputs: list, samples: list, status_cb=None, label: str = "") -> list:
     """
     Runs abatch_score in chunks of GENERAL_BATCH_SIZE with cooldowns between chunks.
-    Keeps each burst under 6,000 TPM on Groq's on_demand tier.
+    Keeps bursts small as a conservative rate-limit buffer.
     """
     all_scores = []
     batches = [inputs[i : i + GENERAL_BATCH_SIZE] for i in range(0, len(inputs), GENERAL_BATCH_SIZE)]
