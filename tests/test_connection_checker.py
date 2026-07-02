@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from app.services.health.connection_checker import (
     ConnectionResult,
     _check_jina_embeddings,
@@ -113,16 +115,25 @@ def test_check_jina_reranker_success():
     assert result.name == "jina_reranker"
 
 
+def test_check_jina_reranker_failure():
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = requests.HTTPError("service unavailable")
+    with patch("app.services.health.connection_checker.requests.post", return_value=mock_response):
+        result = _check_jina_reranker()
+    assert result.healthy is False
+    assert result.name == "jina_reranker"
+
+
 def test_check_all_connections_returns_all_results():
-    with patch.multiple(
-        "app.services.health.connection_checker",
-        _check_neon_postgres=lambda: _ok("postgres"),
-        _check_upstash_redis=lambda: _ok("redis"),
-        _check_qdrant=lambda: _ok("qdrant"),
-        _check_portkey_gateway=lambda: _ok("llm_gateway"),
-        _check_jina_embeddings=lambda: _ok("jina_embeddings"),
-        _check_jina_reranker=lambda: _fail("jina_reranker"),
-    ):
+    mock_checkers = [
+        lambda: _ok("postgres"),
+        lambda: _ok("redis"),
+        lambda: _ok("qdrant"),
+        lambda: _ok("llm_gateway"),
+        lambda: _ok("jina_embeddings"),
+        lambda: _fail("jina_reranker"),
+    ]
+    with patch("app.services.health.connection_checker._CHECKERS", mock_checkers):
         results = check_all_connections()
     assert len(results) == 6
     assert results["postgres"].healthy is True

@@ -12,7 +12,9 @@ from typing import Callable
 
 import logfire
 import requests
+from psycopg_pool import ConnectionPool
 from qdrant_client import QdrantClient
+from redis import Redis
 
 from app.config import settings
 from app.gateway.client import portkey_client
@@ -38,8 +40,6 @@ def _check_neon_postgres() -> ConnectionResult:
     pool = None
     conn = None
     try:
-        from psycopg_pool import ConnectionPool
-
         pool = ConnectionPool(
             conninfo=settings.postgres_uri,
             min_size=1,
@@ -70,9 +70,7 @@ def _check_neon_postgres() -> ConnectionResult:
 def _check_upstash_redis() -> ConnectionResult:
     """Verify Upstash Redis is reachable."""
     try:
-        import redis
-
-        r = redis.Redis.from_url(
+        r = Redis.from_url(
             settings.redis_url,
             socket_connect_timeout=5,
             socket_timeout=5,
