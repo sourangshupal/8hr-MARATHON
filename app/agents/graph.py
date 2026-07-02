@@ -21,7 +21,7 @@ def create_checkpointer() -> BaseCheckpointSaver:
         from psycopg_pool import ConnectionPool
 
         pool = ConnectionPool(
-            conninfo=settings.POSTGRES_URI,
+            conninfo=settings.postgres_uri,
             max_size=20,
             open=False,
             timeout=2,
