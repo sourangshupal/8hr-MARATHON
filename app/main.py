@@ -57,9 +57,9 @@ def _init_rate_limiter():
     from slowapi.util import get_remote_address
 
     try:
-        storage = RedisStorage(settings.REDIS_URL)
+        storage = RedisStorage(settings.redis_url)
         storage.check()  # raises if Redis is unreachable
-        app.state.limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
+        app.state.limiter = Limiter(key_func=get_remote_address, storage_uri=settings.redis_url)
         app.state.rate_limiter_storage = "redis"
         logfire.info("🚦 Rate limiting initialized via Redis.")
     except Exception as e:
