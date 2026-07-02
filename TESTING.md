@@ -55,8 +55,9 @@ Required for local testing:
 
 | Variable | Purpose | Local Value |
 |---|---|---|
-| `REDIS_URL` | Celery broker + backend | `redis://localhost:6379/0` |
-| `POSTGRES_URI` | Checkpointer (optional) | `postgresql://postgres:postgres@localhost:5432/enterprise_rag` |
+| `NEON_DB_URL` | LangGraph checkpointer | From Neon console |
+| `UPSTASH_REDIS_REST_URL` | Upstash REST endpoint | `https://your-db.upstash.io` |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash token/password | From Upstash console |
 | `RAG_API_KEY` | Bearer auth for `/query` | Leave blank to disable auth locally |
 | `OPENAI_API_KEY` | Guardrails + RAG LLM | From OpenAI platform |
 | `JINA_API_KEY` | Embeddings + reranking | From Jina AI |
@@ -73,33 +74,7 @@ redis-cli ping
 
 ---
 
-## 3. Install & Start Redis
 
-### macOS
-
-```bash
-brew install redis
-brew services start redis
-redis-cli ping
-```
-
-### Linux
-
-```bash
-sudo apt-get install redis-server
-sudo systemctl start redis-server
-redis-cli ping
-```
-
-### Docker
-
-```bash
-docker run -d --name redis -p 6379:6379 redis:latest
-```
-
----
-
-## 4. Static Checks & Unit Tests
 
 Run before every full test session:
 
@@ -122,15 +97,9 @@ Expected: `20 passed`.
 
 ## 5. Start the Services
 
-You need four processes (Redis + Celery + FastAPI + optional UI).
+You need three processes (Celery + FastAPI + optional UI). Redis and Postgres are now managed by Upstash and Neon, so no local persistence services are required.
 
-### Terminal 1 — Redis
-
-```bash
-redis-server
-```
-
-### Terminal 2 — Celery Worker
+### Terminal 1 — Celery Worker
 
 On **macOS**, use the Objective-C fork-safety workaround:
 
@@ -154,7 +123,7 @@ celery -A app.tasks worker --loglevel=info -Q celery
 
 Expected log: `celery@... ready.` with no `SIGSEGV` / `SIGABRT`.
 
-### Terminal 3 — FastAPI Server
+### Terminal 2 — FastAPI Server
 
 ```bash
 source .venv/bin/activate
@@ -163,7 +132,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Expected: `Uvicorn running on http://0.0.0.0:8000`.
 
-### Terminal 4 — Streamlit UI (optional)
+### Terminal 3 — Streamlit UI (optional)
 
 ```bash
 source .venv/bin/activate
@@ -424,13 +393,14 @@ or use `--pool=solo`.
 
 ### Postgres shows `unavailable` in `/ready`
 
-- Ensure Postgres is running locally, or
+- Verify `NEON_DB_URL` is correct and the Neon project is active.
+- Ensure the connection string includes `?sslmode=require` if Neon requires TLS.
 - The app falls back to `MemorySaver` automatically (state is lost on restart).
 
 ### Rate limit returns 429 immediately
 
-- Redis may be unreachable; the app falls back to in-memory storage.
-- Check `app.state.rate_limiter_storage` in the server logs.
+- Check `app.state.rate_limiter_storage` in the logs; if it is `memory`, Upstash Redis was unreachable.
+- Verify `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 
 ### `pytest` fails with missing `build_graph` patch
 
@@ -441,16 +411,13 @@ After the recent refactor, mocks must target `app.agents.graph.build_graph`, not
 ## Quick Reference
 
 ```bash
-# 1. Redis
-redis-server
-
-# 2. Worker (macOS)
+# 1. Worker (macOS)
 OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A app.tasks worker --loglevel=info -Q celery
 
-# 3. API
+# 2. API
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# 4. Health + query
+# 3. Health + query
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/query -H "Content-Type: application/json" -d '{"q":"What is a Kubernetes pod?","thread_id":"t1"}'
 ```
