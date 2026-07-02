@@ -142,8 +142,8 @@ python -m app.ingestion.processor DATA --wipe
 
 ### 4. Launch the app
 
-The `/query` endpoint is now asynchronous: it enqueues work to Celery/Redis and returns a `job_id`.
-You need Redis running, a Celery worker, the FastAPI server, and (optionally) the Streamlit UI.
+The `/query` endpoint is now asynchronous: it enqueues work to Celery (backed by Upstash Redis) and returns a `job_id`.
+You need a Celery worker, the FastAPI server, and (optionally) the Streamlit UI. Redis and Postgres are managed by Upstash and Neon; no local persistence services are required.
 
 ```powershell
 # Terminal 1 — Celery worker
