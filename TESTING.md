@@ -140,12 +140,23 @@ streamlit run ui/app.py
 curl http://localhost:8000/health
 # Expected: {"status":"ok"}
 
-# Readiness (checks Qdrant, LLM gateway, Postgres)
+# Readiness (checks Postgres, Redis, Qdrant, LLM gateway, Jina embeddings, Jina reranker)
 curl http://localhost:8000/ready
-# Expected: {"status":"ready","checks":{"qdrant":"ok","llm_gateway":"ok","postgres":"ok"}}
+# Expected: {"status":"ready","checks":{"postgres":"ok","redis":"ok","qdrant":"ok","llm_gateway":"ok","jina_embeddings":"ok","jina_reranker":"ok"}}
 ```
 
-If the Neon Postgres database is unreachable, `postgres` will be `"not_configured"` or `"unavailable"` and the app falls back to `MemorySaver`.
+### Standalone Connection Check
+
+To verify all external dependencies without starting the full server:
+
+```bash
+source .venv/bin/activate
+python -m app.services.health.connection_checker
+```
+
+Expected output lists each service as `OK` or `FAIL` with a message.
+
+If the Neon Postgres database is unreachable, `postgres` will be `"unavailable"` and the app falls back to `MemorySaver`.
 
 ---
 

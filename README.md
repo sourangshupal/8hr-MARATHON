@@ -145,6 +145,11 @@ python -m app.ingestion.processor DATA --wipe
 The `/query` endpoint is now asynchronous: it enqueues work to Celery (backed by Upstash Redis) and returns a `job_id`.
 You need a Celery worker, the FastAPI server, and (optionally) the Streamlit UI. Redis and Postgres are managed by Upstash and Neon; no local persistence services are required.
 
+> **Tip:** You can verify all external connections before starting the server:
+> ```bash
+> python -m app.services.health.connection_checker
+> ```
+
 ```powershell
 # Terminal 1 — Celery worker
 # On macOS, prefork can crash due to Objective-C fork-safety checks.
@@ -191,22 +196,6 @@ ruff format --check app tests evals
 $env:LOGFIRE_IGNORE_NO_CONFIG=1
 pytest tests/
 ```
-
----
-
-## Documentation Index
-
-| # | Guide | What it covers |
-|---|-------|---------------|
-| 1 | [System Overview](DOCS/01_SYSTEM_OVERVIEW.md) | High-level vision and end-to-end flow |
-| 2 | [Ingestion Engine](DOCS/02_INGESTION_ENGINE.md) | Document parsing and indexing pipeline |
-| 3 | [Node Intelligence](DOCS/03_NODE_INTELLIGENCE.md) | Planner, Retriever, Responder internals |
-| 4 | [Observability](DOCS/04_TRACING_AND_OBSERVABILITY.md) | Logfire + LangSmith tracing |
-| 5 | [FlashRank Reranking](DOCS/13_FLASHRANK_RERANKING.md) | Local semantic reranker deep-dive |
-| 6 | [Guardrails](DOCS/15_GUARDRAILS.md) | NeMo Guardrails implementation |
-| 7 | [LLM Gateway](DOCS/16_LLM_GATEWAY.md) | Portkey routing, fallback, and observability |
-| 8 | [Evals](DOCS/17_EVALS.md) | RAGAS metrics theory and token budget |
-| 9 | [Evals Pipeline](DOCS/18_EVALS_PIPELINE.md) | Live eval pipeline and Streamlit demo |
 
 ---
 
