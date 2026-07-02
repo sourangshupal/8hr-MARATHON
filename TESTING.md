@@ -8,20 +8,19 @@ This document describes how to test the entire application locally, feature by f
 
 1. [Prerequisites](#1-prerequisites)
 2. [Environment Variables](#2-environment-variables)
-3. [Install & Start Redis](#3-install--start-redis)
-4. [Static Checks & Unit Tests](#4-static-checks--unit-tests)
-5. [Start the Services](#5-start-the-services)
-6. [Health & Readiness](#6-health--readiness)
-7. [Authentication](#7-authentication)
-8. [Rate Limiting](#8-rate-limiting)
-9. [Async RAG Query Flow](#9-async-rag-query-flow)
-10. [Guardrails](#10-guardrails)
-11. [Graph Endpoint](#11-graph-endpoint)
-12. [Prometheus Metrics](#12-prometheus-metrics)
-13. [Streamlit UI](#13-streamlit-ui)
-14. [Data Ingestion](#14-data-ingestion)
-15. [Evaluation Suite](#15-evaluation-suite)
-16. [Troubleshooting](#16-troubleshooting)
+3. [Static Checks & Unit Tests](#3-static-checks--unit-tests)
+4. [Start the Services](#4-start-the-services)
+5. [Health & Readiness](#5-health--readiness)
+6. [Authentication](#6-authentication)
+7. [Rate Limiting](#7-rate-limiting)
+8. [Async RAG Query Flow](#8-async-rag-query-flow)
+9. [Guardrails](#9-guardrails)
+10. [Graph Endpoint](#10-graph-endpoint)
+11. [Prometheus Metrics](#11-prometheus-metrics)
+12. [Streamlit UI](#12-streamlit-ui)
+13. [Data Ingestion](#13-data-ingestion)
+14. [Evaluation Suite](#14-evaluation-suite)
+15. [Troubleshooting](#15-troubleshooting)
 
 ---
 
@@ -29,7 +28,7 @@ This document describes how to test the entire application locally, feature by f
 
 - Python 3.12+
 - `uv` or `pip` for package management
-- A running Redis instance (local or cloud)
+- An Upstash Redis database (REST URL + token set in `.env`)
 - Qdrant vector database (cloud endpoint is already configured in `.env`)
 - API keys set in `.env` (Groq, Gemini, Portkey, Logfire, etc.)
 - macOS users only: `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` is required for Celery prefork
@@ -65,16 +64,9 @@ Required for local testing:
 | `QDRANT_URL` / `QDRANT_API_KEY` | Vector DB | Cloud endpoint |
 | `LOGFIRE_TOKEN` | Observability | Optional for local runs |
 
-Verify Redis connectivity:
-
-```bash
-redis-cli ping
-# Expected: PONG
-```
-
 ---
 
-
+## 3. Static Checks & Unit Tests
 
 Run before every full test session:
 
@@ -95,7 +87,7 @@ Expected: `20 passed`.
 
 ---
 
-## 5. Start the Services
+## 4. Start the Services
 
 You need three processes (Celery + FastAPI + optional UI). Redis and Postgres are now managed by Upstash and Neon, so no local persistence services are required.
 
@@ -141,7 +133,7 @@ streamlit run ui/app.py
 
 ---
 
-## 6. Health & Readiness
+## 5. Health & Readiness
 
 ```bash
 # Liveness
@@ -153,11 +145,11 @@ curl http://localhost:8000/ready
 # Expected: {"status":"ready","checks":{"qdrant":"ok","llm_gateway":"ok","postgres":"ok"}}
 ```
 
-If Postgres is not running, `postgres` will be `"not_configured"` or `"unavailable"` and the app falls back to `MemorySaver`.
+If the Neon Postgres database is unreachable, `postgres` will be `"not_configured"` or `"unavailable"` and the app falls back to `MemorySaver`.
 
 ---
 
-## 7. Authentication
+## 6. Authentication
 
 When `RAG_API_KEY` is set, all protected endpoints require a Bearer token:
 
@@ -181,7 +173,7 @@ When `RAG_API_KEY` is blank, auth is disabled for local testing.
 
 ---
 
-## 8. Rate Limiting
+## 7. Rate Limiting
 
 The default rate limit is configurable in `app/config.py` (`RATE_LIMIT_PER_MINUTE`).
 
@@ -199,7 +191,7 @@ Eventually you should receive `429 Too Many Requests`.
 
 ---
 
-## 9. Async RAG Query Flow
+## 8. Async RAG Query Flow
 
 ### Submit a query
 
@@ -248,7 +240,7 @@ A successful result contains:
 
 ---
 
-## 10. Guardrails
+## 9. Guardrails
 
 The guardrails block off-topic and jailbreak attempts and handle greetings/farewells.
 
@@ -294,7 +286,7 @@ Expected: `queued` and eventually a RAG answer.
 
 ---
 
-## 11. Graph Endpoint
+## 10. Graph Endpoint
 
 Returns a PNG diagram of the LangGraph workflow:
 
@@ -306,7 +298,7 @@ If auth is enabled, add `-H "Authorization: Bearer <key>"`.
 
 ---
 
-## 12. Prometheus Metrics
+## 11. Prometheus Metrics
 
 ```bash
 curl http://localhost:8000/metrics
@@ -321,7 +313,7 @@ Look for:
 
 ---
 
-## 13. Streamlit UI
+## 12. Streamlit UI
 
 1. Start the UI:
 
@@ -338,7 +330,7 @@ streamlit run ui/app.py
 
 ---
 
-## 14. Data Ingestion
+## 13. Data Ingestion
 
 To test ingestion into Qdrant:
 
@@ -357,7 +349,7 @@ Then run a RAG query to confirm retrieval works.
 
 ---
 
-## 15. Evaluation Suite
+## 14. Evaluation Suite
 
 The eval suite requires the backend running on `http://localhost:8000`.
 
@@ -379,7 +371,7 @@ Verify that metrics (faithfulness, relevancy, etc.) are computed and reported.
 
 ---
 
-## 16. Troubleshooting
+## 15. Troubleshooting
 
 ### Celery worker exits with `SIGSEGV` / `SIGABRT` on macOS
 

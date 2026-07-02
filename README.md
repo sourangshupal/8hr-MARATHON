@@ -107,9 +107,10 @@ JINA_API_KEY = "..."
 QDRANT_API_KEY = "..."
 QDRANT_CLUSTER_ENDPOINT = "https://your-cluster.cloud.qdrant.io:6333"
 
-# Production persistence & queue
-POSTGRES_URI = "postgresql://postgres:postgres@localhost:5432/enterprise_rag"
-REDIS_URL = "redis://localhost:6379/0"
+# Production persistence (Neon) & cache (Upstash Redis)
+NEON_DB_URL = "postgresql://user:password@host.neon.tech/enterprise_rag?sslmode=require"
+UPSTASH_REDIS_REST_URL = "https://your-db.upstash.io"
+UPSTASH_REDIS_REST_TOKEN = "your-upstash-token"
 
 # API safety
 RAG_API_KEY = ""                       # set in production to require bearer auth
@@ -145,18 +146,15 @@ The `/query` endpoint is now asynchronous: it enqueues work to Celery/Redis and 
 You need Redis running, a Celery worker, the FastAPI server, and (optionally) the Streamlit UI.
 
 ```powershell
-# Terminal 1 — Redis (or use a managed Redis/cloud instance)
-redis-server
-
-# Terminal 2 — Celery worker
+# Terminal 1 — Celery worker
 # On macOS, prefork can crash due to Objective-C fork-safety checks.
 # Use OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES or --pool=solo for local dev.
 celery -A app.tasks worker --loglevel=info -Q celery
 
-# Terminal 3 — FastAPI backend
+# Terminal 2 — FastAPI backend
 uvicorn app.main:app --reload --port 8000
 
-# Terminal 4 — Streamlit UI
+# Terminal 3 — Streamlit UI
 streamlit run ui/app.py
 ```
 
