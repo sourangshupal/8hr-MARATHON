@@ -49,8 +49,9 @@ jobs:
         env:
           IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           AWS_REGION: ${{ env.AWS_REGION }}
-          REDIS_URL_ARN: ${{ secrets.REDIS_URL_ARN }}
-          POSTGRES_URI_ARN: ${{ secrets.POSTGRES_URI_ARN }}
+          NEON_DB_URL_ARN: ${{ secrets.NEON_DB_URL_ARN }}
+          UPSTASH_REDIS_REST_URL_ARN: ${{ secrets.UPSTASH_REDIS_REST_URL_ARN }}
+          UPSTASH_REDIS_REST_TOKEN_ARN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN_ARN }}
           QDRANT_URL_ARN: ${{ secrets.QDRANT_URL_ARN }}
           QDRANT_API_KEY_ARN: ${{ secrets.QDRANT_API_KEY_ARN }}
           OPENAI_API_KEY_ARN: ${{ secrets.OPENAI_API_KEY_ARN }}
@@ -64,8 +65,9 @@ jobs:
             sed \
               -e "s|<IMAGE_NAME>|$IMAGE_URI|g" \
               -e "s|<AWS_REGION>|$AWS_REGION|g" \
-              -e "s|<REDIS_URL_ARN>|$REDIS_URL_ARN|g" \
-              -e "s|<POSTGRES_URI_ARN>|$POSTGRES_URI_ARN|g" \
+              -e "s|<NEON_DB_URL_ARN>|$NEON_DB_URL_ARN|g" \
+              -e "s|<UPSTASH_REDIS_REST_URL_ARN>|$UPSTASH_REDIS_REST_URL_ARN|g" \
+              -e "s|<UPSTASH_REDIS_REST_TOKEN_ARN>|$UPSTASH_REDIS_REST_TOKEN_ARN|g" \
               -e "s|<QDRANT_URL_ARN>|$QDRANT_URL_ARN|g" \
               -e "s|<QDRANT_API_KEY_ARN>|$QDRANT_API_KEY_ARN|g" \
               -e "s|<OPENAI_API_KEY_ARN>|$OPENAI_API_KEY_ARN|g" \
