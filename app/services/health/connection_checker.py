@@ -48,8 +48,9 @@ def _check_neon_postgres() -> ConnectionResult:
             timeout=5,
         )
         conn = pool.getconn(timeout=5)
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
+        with conn.transaction():
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
         return ConnectionResult("postgres", True, "Neon Postgres reachable")
     except Exception as e:
         logfire.warning(f"Postgres health check failed: {e}")
