@@ -24,6 +24,7 @@ from app.agents.graph import build_graph
 from app.guardrails import guard, initialize_rails
 from app.health import router as health_router
 from app.logging import set_request_id
+from app.services.health.connection_checker import check_all_connections, log_connection_summary
 from app.tasks import run_rag_pipeline
 
 # Custom Prometheus metrics
@@ -166,6 +167,13 @@ def startup_event():
             logfire.error(f"❌ Failed to initialize Postgres checkpointer: {e}")
 
     app.state.rate_limiter_enabled = _init_rate_limiter()
+
+    # Verify all external dependencies are reachable.
+    connection_results = check_all_connections()
+    all_healthy = log_connection_summary(connection_results)
+    if settings.STRICT_STARTUP and not all_healthy:
+        failed = [name for name, r in connection_results.items() if not r.healthy]
+        raise RuntimeError(f"STRICT_STARTUP enabled; failing services: {', '.join(failed)}")
 
     if not settings.API_KEY:
         logfire.warning("🔓 RAG_API_KEY is not set — /query is open to anyone. Set it in production.")
