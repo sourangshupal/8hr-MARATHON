@@ -93,7 +93,14 @@ Store all sensitive values in **AWS Secrets Manager** and inject them into task 
 
 - `QDRANT_COLLECTION=enterprise_rag`
 - `RATE_LIMIT_PER_MINUTE=60`
+- `PORTKEY_PRIMARY_SLUG=marathon-api`
+- `PORTKEY_FALLBACK_SLUG=anthropic-fallback`
+- `STRICT_STARTUP=true` (production only; set to `false` for local development)
 - `PYTHONUNBUFFERED=1`
+
+> **Note on `STRICT_STARTUP`:** When `true`, the FastAPI server refuses to start if any external dependency (Neon, Upstash, Qdrant, Portkey, Jina) is unreachable. Set to `false` locally so the app starts even if some services are optional.
+
+> **Note on embedding dimension:** The app uses `jina-embeddings-v3` which produces **1024-dimensional** vectors. The Qdrant collection must be created with `size=1024` and `distance=Cosine`. The ingestion script (`app.ingestion.processor`) probes the model at runtime and creates the collection with the correct dimension automatically.
 
 ---
 
@@ -141,6 +148,9 @@ This runs the container as a non-root user.
       "environment": [
         {"name": "QDRANT_COLLECTION", "value": "enterprise_rag"},
         {"name": "RATE_LIMIT_PER_MINUTE", "value": "60"},
+        {"name": "PORTKEY_PRIMARY_SLUG", "value": "marathon-api"},
+        {"name": "PORTKEY_FALLBACK_SLUG", "value": "anthropic-fallback"},
+        {"name": "STRICT_STARTUP", "value": "true"},
         {"name": "PYTHONUNBUFFERED", "value": "1"}
       ],
       "secrets": [
@@ -189,6 +199,9 @@ Uses the same image, but with larger CPU/memory because it runs embeddings, rera
       "command": ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "4"],
       "environment": [
         {"name": "QDRANT_COLLECTION", "value": "enterprise_rag"},
+        {"name": "PORTKEY_PRIMARY_SLUG", "value": "marathon-api"},
+        {"name": "PORTKEY_FALLBACK_SLUG", "value": "anthropic-fallback"},
+        {"name": "STRICT_STARTUP", "value": "true"},
         {"name": "PYTHONUNBUFFERED", "value": "1"}
       ],
       "secrets": [
@@ -235,7 +248,7 @@ Uses the same image, but with larger CPU/memory because it runs embeddings, rera
       "command": ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"],
       "portMappings": [{"containerPort": 8501, "protocol": "tcp"}],
       "environment": [
-        {"name": "API_BASE_URL", "value": "https://api.yourdomain.com"},
+        {"name": "BACKEND_URL", "value": "https://api.yourdomain.com"},
         {"name": "PYTHONUNBUFFERED", "value": "1"}
       ],
       "logConfiguration": {
@@ -317,10 +330,12 @@ services:
       - "8000:8080"
     environment:
       QDRANT_URL: http://qdrant:6333
+      QDRANT_CLUSTER_ENDPOINT: http://qdrant:6333
       QDRANT_API_KEY: ""
       QDRANT_COLLECTION: enterprise_rag
       RATE_LIMIT_PER_MINUTE: "60"
       RAG_API_KEY: ""
+      STRICT_STARTUP: "false"
     env_file:
       - .env
     depends_on:
@@ -333,9 +348,11 @@ services:
       dockerfile: Dockerfile
     environment:
       QDRANT_URL: http://qdrant:6333
+      QDRANT_CLUSTER_ENDPOINT: http://qdrant:6333
       QDRANT_API_KEY: ""
       QDRANT_COLLECTION: enterprise_rag
       RAG_API_KEY: ""
+      STRICT_STARTUP: "false"
     env_file:
       - .env
     depends_on:
@@ -349,7 +366,7 @@ services:
     ports:
       - "8501:8501"
     environment:
-      API_BASE_URL: http://api:8080
+      BACKEND_URL: http://api:8080
     depends_on:
       - api
     command: ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
@@ -461,6 +478,8 @@ If using S3, download files into the task's ephemeral storage before running the
 - **Fargate** is easy to operate but more expensive per vCPU than EC2. For steady high throughput, consider EC2-backed ECS or EKS.
 - **Neon** and **Upstash** are managed services that remove operational overhead for Postgres and Redis; pricing is usage-based.
 - **Qdrant Cloud** is the simplest vector DB option. Only self-host Qdrant if data residency requirements demand it.
+- **Embeddings:** The app uses `jina-embeddings-v3` and creates the Qdrant collection with a **1024-dimensional** vector size and `Cosine` distance. Do not manually create the collection with a different dimension.
+- **Reranker:** The RAG pipeline uses `jina-reranker-v3` via the Jina AI API.
 - Keep `requirements-prod.txt` lean. Do not include `streamlit`, `ragas`, `sentence-transformers`, or `deepeval` in the production image unless required.
 
 ---
