@@ -3,7 +3,7 @@
 import os
 from urllib.parse import quote
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     PORTKEY_PRIMARY_CONFIG_ID: str
 
     # --- QDRANT VECTOR DB ---
-    QDRANT_URL: str = Field(alias="QDRANT_CLUSTER_ENDPOINT")
+    QDRANT_URL: str = Field(validation_alias=AliasChoices("QDRANT_URL", "QDRANT_CLUSTER_ENDPOINT"))
     QDRANT_API_KEY: str | None = None
     QDRANT_COLLECTION: str = "enterprise_rag"
 
@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     LANGSMITH_API_KEY: str | None = None
     LANGSMITH_PROJECT: str = "rag_scale_test"
     LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+
+    @field_validator("QDRANT_API_KEY", mode="before")
+    @classmethod
+    def _empty_qdrant_key_as_none(cls, v):
+        """Treat empty QDRANT_API_KEY as unset so local Qdrant doesn't receive a blank header."""
+        if v == "" or v is None:
+            return None
+        return v
 
     @property
     def judge_api_key(self) -> str:

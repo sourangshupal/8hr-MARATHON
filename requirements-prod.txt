@@ -25,6 +25,11 @@ sqlalchemy==2.0.49
 qdrant-client==1.17.1
 redis==7.4.0
 
+# --- PRODUCTION PERSISTENCE ---
+langgraph-checkpoint-postgres==2.0.16
+psycopg-pool==3.3.0
+psycopg-binary==3.3.0
+
 # --- JINA API EMBEDDINGS + LOCAL FALLBACK ---
 # sentence-transformers pulls torch; needed for the mxbai local fallback path.
 sentence-transformers==3.2.1
@@ -37,7 +42,7 @@ langchain-google-vertexai==3.2.3
 langchain-community==0.4.1
 langchain-openai==1.2.1
 pydantic==2.13.4
-pydantic-settings==2.9.1
+pydantic-settings==2.14.2
 
 # --- GUARDRAILS ---
 nemoguardrails==0.21.0
@@ -52,6 +57,10 @@ logfire[fastapi,requests]==4.32.1
 loguru==0.7.3
 prometheus-client==0.25.0
 prometheus-fastapi-instrumentator==8.0.2
+slowapi==0.1.9
+
+# --- UI ---
+streamlit==1.58.0
 
 # --- INGESTION PARSERS ---
 python-pptx==1.0.2
