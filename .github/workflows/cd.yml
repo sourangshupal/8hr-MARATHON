@@ -12,7 +12,6 @@ env:
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'enterprise-rag' }}
   ECS_CLUSTER: ${{ secrets.ECS_CLUSTER || 'rag-cluster' }}
   ECS_SERVICE_API: ${{ secrets.ECS_SERVICE_API || 'rag-api' }}
-  ECS_SERVICE_WORKER: ${{ secrets.ECS_SERVICE_WORKER || 'rag-worker' }}
   ECS_SERVICE_UI: ${{ secrets.ECS_SERVICE_UI || 'rag-ui' }}
 
 jobs:
@@ -80,7 +79,6 @@ jobs:
           }
 
           render .aws/task-definitions/rag-api.json    rag-api.json
-          render .aws/task-definitions/rag-worker.json rag-worker.json
           render .aws/task-definitions/rag-ui.json     rag-ui.json
 
       - name: Deploy rag-api
@@ -88,14 +86,6 @@ jobs:
         with:
           task-definition: rag-api.json
           service: ${{ env.ECS_SERVICE_API }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-      - name: Deploy rag-worker
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: rag-worker.json
-          service: ${{ env.ECS_SERVICE_WORKER }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 

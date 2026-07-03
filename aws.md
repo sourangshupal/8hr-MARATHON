@@ -263,14 +263,6 @@ aws ec2 authorize-security-group-ingress \
   --port 8080 \
   --source-group $ALB_SG
 
-# Worker security group (no inbound needed)
-export WORKER_SG=$(aws ec2 create-security-group \
-  --group-name "${PROJECT}-worker-sg" \
-  --description "RAG worker task security group" \
-  --vpc-id $VPC_ID \
-  --query 'GroupId' \
-  --output text)
-
 # UI security group
 export UI_SG=$(aws ec2 create-security-group \
   --group-name "${PROJECT}-ui-sg" \
@@ -287,7 +279,6 @@ aws ec2 authorize-security-group-ingress \
 
 echo "ALB_SG=$ALB_SG"
 echo "API_SG=$API_SG"
-echo "WORKER_SG=$WORKER_SG"
 echo "UI_SG=$UI_SG"
 ```
 
@@ -386,7 +377,6 @@ aws ecr put-lifecycle-policy \
 
 ```bash
 aws logs create-log-group --log-group-name /ecs/rag-api
-aws logs create-log-group --log-group-name /ecs/rag-worker
 aws logs create-log-group --log-group-name /ecs/rag-ui
 ```
 
@@ -529,10 +519,6 @@ aws iam create-role \
   --assume-role-policy-document file:///tmp/ecs-trust-policy.json
 
 aws iam create-role \
-  --role-name rag-worker-task-role \
-  --assume-role-policy-document file:///tmp/ecs-trust-policy.json
-
-aws iam create-role \
   --role-name rag-ui-task-role \
   --assume-role-policy-document file:///tmp/ecs-trust-policy.json
 ```
@@ -569,7 +555,7 @@ export SECRETS_POLICY_ARN=$(aws iam create-policy \
   --query 'Policy.Arn' \
   --output text)
 
-for ROLE in rag-api-task-role rag-worker-task-role rag-ui-task-role; do
+for ROLE in rag-api-task-role rag-ui-task-role; do
   aws iam attach-role-policy \
     --role-name $ROLE \
     --policy-arn $SECRETS_POLICY_ARN
@@ -616,16 +602,10 @@ render() {
 }
 
 render .aws/task-definitions/rag-api.json    /tmp/rag-api.json
-render .aws/task-definitions/rag-worker.json /tmp/rag-worker.json
 render .aws/task-definitions/rag-ui.json     /tmp/rag-ui.json
 
 export RAG_API_TASK_DEF_ARN=$(aws ecs register-task-definition \
   --cli-input-json file:///tmp/rag-api.json \
-  --query 'taskDefinition.taskDefinitionArn' \
-  --output text)
-
-export RAG_WORKER_TASK_DEF_ARN=$(aws ecs register-task-definition \
-  --cli-input-json file:///tmp/rag-worker.json \
   --query 'taskDefinition.taskDefinitionArn' \
   --output text)
 
@@ -635,7 +615,6 @@ export RAG_UI_TASK_DEF_ARN=$(aws ecs register-task-definition \
   --output text)
 
 echo "RAG_API_TASK_DEF_ARN=$RAG_API_TASK_DEF_ARN"
-echo "RAG_WORKER_TASK_DEF_ARN=$RAG_WORKER_TASK_DEF_ARN"
 echo "RAG_UI_TASK_DEF_ARN=$RAG_UI_TASK_DEF_ARN"
 ```
 
@@ -726,21 +705,7 @@ aws ecs create-service \
   --deployment-configuration "minimumHealthyPercent=100,maximumPercent=200"
 ```
 
-### 14.2 Worker Service
-
-```bash
-aws ecs create-service \
-  --cluster $ECS_CLUSTER \
-  --service-name rag-worker \
-  --task-definition $RAG_WORKER_TASK_DEF_ARN \
-  --desired-count 1 \
-  --launch-type FARGATE \
-  --platform-version LATEST \
-  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2],securityGroups=[$WORKER_SG],assignPublicIp=DISABLED}" \
-  --deployment-configuration "minimumHealthyPercent=0,maximumPercent=100"
-```
-
-### 14.3 UI Service
+### 14.2 UI Service
 
 ```bash
 aws ecs create-service \
@@ -790,32 +755,7 @@ aws application-autoscaling put-scaling-policy \
 
 > **Tip:** The `ResourceLabel` format is `app/<alb-name>/<alb-id>/targetgroup/<tg-name>/<tg-id>`. If the command above fails, copy the exact label from the AWS Console (EC2 → Target Groups → Monitoring).
 
-### 15.2 Worker Auto Scaling (CPU)
-
-```bash
-aws application-autoscaling register-scalable-target \
-  --service-namespace ecs \
-  --resource-id "service/${ECS_CLUSTER}/rag-worker" \
-  --scalable-dimension ecs:service:DesiredCount \
-  --min-capacity 1 \
-  --max-capacity 20 \
-  --role-name ecsAutoscaleRole
-
-aws application-autoscaling put-scaling-policy \
-  --service-namespace ecs \
-  --resource-id "service/${ECS_CLUSTER}/rag-worker" \
-  --scalable-dimension ecs:service:DesiredCount \
-  --policy-name rag-worker-cpu \
-  --policy-type TargetTrackingScaling \
-  --target-tracking-scaling-policy-configuration '{
-    "PredefinedMetricSpecification": {"PredefinedMetricType": "ECSServiceAverageCPUUtilization"},
-    "TargetValue": 70.0,
-    "ScaleOutCooldown": 60,
-    "ScaleInCooldown": 300
-  }'
-```
-
-### 15.3 UI Auto Scaling (optional)
+### 15.2 UI Auto Scaling (optional)
 
 ```bash
 aws application-autoscaling register-scalable-target \
@@ -865,7 +805,6 @@ gh secret set AWS_REGION               --body "$AWS_REGION"
 gh secret set ECR_REPOSITORY           --body "$ECR_REPO"
 gh secret set ECS_CLUSTER              --body "$ECS_CLUSTER"
 gh secret set ECS_SERVICE_API          --body "rag-api"
-gh secret set ECS_SERVICE_WORKER       --body "rag-worker"
 gh secret set ECS_SERVICE_UI           --body "rag-ui"
 
 gh secret set NEON_DB_URL_ARN             --body "$NEON_DB_URL_ARN"
@@ -910,7 +849,7 @@ You can also watch ECS services from the CLI:
 ```bash
 aws ecs describe-services \
   --cluster $ECS_CLUSTER \
-  --services rag-api rag-worker rag-ui
+  --services rag-api rag-ui
 ```
 
 ---
@@ -942,7 +881,6 @@ Check logs:
 
 ```bash
 aws logs tail /ecs/rag-api --follow
-aws logs tail /ecs/rag-worker --follow
 ```
 
 ---
@@ -953,16 +891,14 @@ Run these commands in order to avoid dependency errors.
 
 ```bash
 # 1. Delete ECS services
-aws ecs update-service --cluster $ECS_CLUSTER --service rag-api   --desired-count 0
-aws ecs update-service --cluster $ECS_CLUSTER --service rag-worker --desired-count 0
-aws ecs update-service --cluster $ECS_CLUSTER --service rag-ui    --desired-count 0
+aws ecs update-service --cluster $ECS_CLUSTER --service rag-api --desired-count 0
+aws ecs update-service --cluster $ECS_CLUSTER --service rag-ui --desired-count 0
 
-aws ecs delete-service --cluster $ECS_CLUSTER --service rag-api   --force
-aws ecs delete-service --cluster $ECS_CLUSTER --service rag-worker --force
-aws ecs delete-service --cluster $ECS_CLUSTER --service rag-ui    --force
+aws ecs delete-service --cluster $ECS_CLUSTER --service rag-api --force
+aws ecs delete-service --cluster $ECS_CLUSTER --service rag-ui --force
 
 # 2. Deregister task definitions (mark inactive)
-for FAMILY in rag-api rag-worker rag-ui; do
+for FAMILY in rag-api rag-ui; do
   aws ecs deregister-task-definition --task-definition "${FAMILY}:1"
 done
 
@@ -984,17 +920,15 @@ done
 
 # 7. Delete IAM policy and roles
 aws iam detach-role-policy --role-name rag-api-task-role --policy-arn $SECRETS_POLICY_ARN
-aws iam detach-role-policy --role-name rag-worker-task-role --policy-arn $SECRETS_POLICY_ARN
 aws iam detach-role-policy --role-name rag-ui-task-role --policy-arn $SECRETS_POLICY_ARN
 aws iam delete-policy --policy-arn $SECRETS_POLICY_ARN
 
-for ROLE in rag-api-task-role rag-worker-task-role rag-ui-task-role; do
+for ROLE in rag-api-task-role rag-ui-task-role; do
   aws iam delete-role --role-name $ROLE
 done
 
 # 8. Delete CloudWatch log groups
 aws logs delete-log-group --log-group-name /ecs/rag-api
-aws logs delete-log-group --log-group-name /ecs/rag-worker
 aws logs delete-log-group --log-group-name /ecs/rag-ui
 
 # 9. Delete NAT gateway and Elastic IP

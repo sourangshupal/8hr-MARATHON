@@ -1,7 +1,7 @@
 """Centralized, Pydantic-validated application settings."""
 
 import os
-from urllib.parse import quote
+from urllib.parse import quote, urlunsplit
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -82,13 +82,14 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         """TLS Redis URL derived from Upstash REST credentials.
 
-        Upstash exposes the same host for REST and TLS Redis; the REST token is
-        also the Redis password. `limits` uses it for rate limiting, so we build
-        `rediss://<token>@<host>/0`.
+        Upstash exposes the same host for REST and TLS Redis. The REST token is
+        used as the Redis password under the default username. The result is
+        passed to `limits` for rate limiting and to the health checker.
         """
         host = self.UPSTASH_REDIS_REST_URL.replace("https://", "").rstrip("/")
         token = quote(self.UPSTASH_REDIS_REST_TOKEN, safe="")
-        return f"rediss://default:{token}@{host}/0?ssl_cert_reqs=required"
+        netloc = f"default:{token}@{host}"
+        return urlunsplit(("rediss", netloc, "/0", "ssl_cert_reqs=required", ""))
 
 
 # Singleton used across the app.

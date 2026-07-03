@@ -1,6 +1,6 @@
 # AWS ECS Fargate Deployment Plan — Enterprise Agentic RAG
 
-> **Approved approach:** Option A — Managed Qdrant with Fargate-hosted API, Worker, and optional UI.  
+> **Approved approach:** Option A — Managed Qdrant with Fargate-hosted API and optional UI.  
 > This plan keeps all stateful services (Redis via Upstash, Postgres via Neon, Qdrant) outside of Fargate for simpler operations and reliable auto-scaling.
 
 ---
@@ -9,7 +9,7 @@
 
 Deploy the Enterprise Agentic RAG application on AWS using **Amazon ECS on Fargate** in a microservices architecture, with:
 
-- Separate scaling for synchronous API traffic and asynchronous RAG jobs
+- Synchronous RAG execution inside the API service
 - Managed persistence for Postgres (Neon), Redis (Upstash), and Qdrant (Qdrant Cloud)
 - Auto-scaling policies for each compute service
 - A local `docker-compose.yml` for pre-cloud validation
@@ -180,58 +180,7 @@ This runs the container as a non-root user.
 }
 ```
 
-### 7.2 rag-worker
-
-Uses the same image, but with larger CPU/memory because it runs embeddings, reranking, and LLM calls.
-
-```json
-{
-  "family": "rag-worker",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "2048",
-  "memory": "4096",
-  "executionRoleArn": "ecsTaskExecutionRole",
-  "taskRoleArn": "rag-worker-task-role",
-  "containerDefinitions": [
-    {
-      "name": "worker",
-      "image": "<ecr>/enterprise-rag:<git-sha>",
-      "command": ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "4"],
-      "environment": [
-        {"name": "QDRANT_COLLECTION", "value": "enterprise_rag"},
-        {"name": "PORTKEY_PRIMARY_SLUG", "value": "marathon-api"},
-        {"name": "PORTKEY_FALLBACK_SLUG", "value": "anthropic-fallback"},
-        {"name": "STRICT_STARTUP", "value": "true"},
-        {"name": "PYTHONUNBUFFERED", "value": "1"}
-      ],
-      "secrets": [
-        {"name": "NEON_DB_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/neon-db-url"},
-        {"name": "UPSTASH_REDIS_REST_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/upstash-redis-rest-url"},
-        {"name": "UPSTASH_REDIS_REST_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/upstash-redis-rest-token"},
-        {"name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-url"},
-        {"name": "QDRANT_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/qdrant-api-key"},
-        {"name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/openai-api-key"},
-        {"name": "JINA_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/jina-api-key"},
-        {"name": "PORTKEY_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/portkey-api-key"},
-        {"name": "RAG_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/rag-api-key"},
-        {"name": "LOGFIRE_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/logfire-token"},
-        {"name": "LANGSMITH_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:rag/langsmith-api-key"}
-      ],
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-group": "/ecs/rag-worker",
-          "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "worker"
-        }
-      }
-    }
-  ]
-}
-```
-
-### 7.3 rag-ui (optional)
+### 7.2 rag-ui (optional)
 
 ```json
 {
@@ -280,7 +229,7 @@ Target tracking policies:
 **Scale:** min 2, max 10 tasks.
 
 
-### 8.3 rag-ui
+### 8.2 rag-ui
 
 If the UI is public:
 
@@ -296,8 +245,6 @@ If the UI is internal-only, run a fixed count of 1.
 Use this file to validate the full stack locally before deploying to AWS.
 
 ```yaml
-version: "3.8"
-
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -316,13 +263,10 @@ services:
     ports:
       - "8000:8080"
     environment:
-      QDRANT_URL: http://qdrant:6333
-      QDRANT_CLUSTER_ENDPOINT: http://qdrant:6333
-      QDRANT_API_KEY: ""
       QDRANT_COLLECTION: enterprise_rag
       RATE_LIMIT_PER_MINUTE: "60"
       RAG_API_KEY: ""
-      STRICT_STARTUP: "false"
+      LOGFIRE_IGNORE_NO_CONFIG: "1"
     env_file:
       - .env
     depends_on:
@@ -337,6 +281,9 @@ services:
       - "8501:8501"
     environment:
       BACKEND_URL: http://api:8080
+      LOGFIRE_IGNORE_NO_CONFIG: "1"
+    volumes:
+      - ./ui:/app/ui:ro
     depends_on:
       - api
     command: ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
@@ -467,7 +414,6 @@ If using S3, download files into the task's ephemeral storage before running the
     - `GET /health`
     - `GET /ready`
     - `POST /query`
-    - `GET /query/status/{job_id}`
     - `GET /metrics`
 13. Run ingestion job and validate RAG answers.
 14. Enable CloudWatch alarms and dashboards.
