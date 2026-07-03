@@ -27,8 +27,10 @@ def create_checkpointer() -> BaseCheckpointSaver:
             conninfo=settings.postgres_uri,
             max_size=20,
             open=False,
-            timeout=2,
-            num_workers=1,
+            timeout=10,
+            num_workers=3,
+            check=ConnectionPool.check_connection,
+            max_idle=240,
         )
         # Verify connectivity before committing to Postgres; otherwise the first
         # graph invocation will hang on connection retries.
