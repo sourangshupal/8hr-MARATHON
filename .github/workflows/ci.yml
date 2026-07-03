@@ -35,5 +35,13 @@ jobs:
       - name: Test with pytest
         env:
           LOGFIRE_IGNORE_NO_CONFIG: 1
+          JINA_API_KEY: dummy
+          OPENAI_API_KEY: dummy
+          PORTKEY_API_KEY: dummy
+          PORTKEY_PRIMARY_CONFIG_ID: pc-dummy
+          QDRANT_URL: https://dummy.example.com
+          NEON_DB_URL: postgres://dummy:dummy@dummy.db:5432/dummy
+          UPSTASH_REDIS_REST_URL: https://dummy.example.com
+          UPSTASH_REDIS_REST_TOKEN: dummy
         run: |
           pytest tests/
