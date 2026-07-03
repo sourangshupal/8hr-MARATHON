@@ -88,7 +88,7 @@ class Settings(BaseSettings):
         """
         host = self.UPSTASH_REDIS_REST_URL.replace("https://", "").rstrip("/")
         token = quote(self.UPSTASH_REDIS_REST_TOKEN, safe="")
-        return f"rediss://{token}@{host}/0?ssl_cert_reqs=required"
+        return f"rediss://default:{token}@{host}/0?ssl_cert_reqs=required"
 
 
 # Singleton used across the app.
