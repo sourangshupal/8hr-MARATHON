@@ -25,7 +25,6 @@ from app.guardrails import guard, initialize_rails
 from app.health import router as health_router
 from app.logging import set_request_id
 from app.services.health.connection_checker import check_all_connections, log_connection_summary
-from app.tasks import run_rag_pipeline
 
 # Custom Prometheus metrics
 RAG_REQUESTS_TOTAL = Counter(
@@ -200,8 +199,8 @@ def query(
     _api_key: str = Depends(verify_api_key),
 ):
     """
-    Enqueues the LangGraph RAG pipeline as a background Celery task.
-    Returns immediately with a job_id that can be polled via /query/status/{job_id}.
+    Runs the LangGraph RAG pipeline synchronously.
+    Returns the final answer, thought process, status, and sources.
     """
     q = body.q
     thread_id = body.thread_id
@@ -209,8 +208,8 @@ def query(
     set_request_id(request_id)
 
     start = time.perf_counter()
-    with logfire.span("🔍 /query enqueue", request_id=request_id, thread_id=thread_id):
-        # Gate: run guardrails synchronously so blocked requests never hit the queue.
+    with logfire.span("🔍 /query", request_id=request_id, thread_id=thread_id):
+        # Gate: run guardrails synchronously so blocked requests never run the graph.
         rail_fired, rail_response = guard(q)
         if rail_fired:
             GUARDRAILS_BLOCKS_TOTAL.labels(blocked="true").inc()
@@ -228,26 +227,36 @@ def query(
         GUARDRAILS_BLOCKS_TOTAL.labels(blocked="false").inc()
 
         try:
-            task = run_rag_pipeline.delay(q, thread_id, rag_request_id=request_id)
-            RAG_REQUESTS_TOTAL.labels(status="queued").inc()
+            rag_agent = app.state.rag_agent
+            initial_state = {
+                "messages": [{"role": "user", "content": q}],
+                "current_query": q,
+                "documents": [],
+                "plan": ["Start"],
+                "status": "Initializing Graph...",
+            }
+            config = {"configurable": {"thread_id": thread_id}}
+            final_output = rag_agent.invoke(initial_state, config=config)
+
+            RAG_REQUESTS_TOTAL.labels(status="success").inc()
             RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.info(
-                "📨 RAG pipeline enqueued",
-                job_id=task.id,
+                "✅ RAG pipeline completed",
                 request_id=request_id,
                 thread_id=thread_id,
             )
             return {
-                "job_id": task.id,
-                "request_id": request_id,
-                "status": "queued",
-                "poll_url": f"/query/status/{task.id}",
+                "question": q,
+                "answer": final_output.get("final_answer"),
+                "thought_process": final_output.get("plan"),
+                "status": final_output.get("status"),
+                "sources": final_output.get("documents", []),
             }
         except Exception as e:
             RAG_REQUESTS_TOTAL.labels(status="error").inc()
             RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
             logfire.error(
-                f"❌ Failed to enqueue RAG pipeline: {e}",
+                f"❌ RAG pipeline failed: {e}",
                 request_id=request_id,
                 thread_id=thread_id,
             )
@@ -256,35 +265,6 @@ def query(
                 content={
                     "request_id": request_id,
                     "status": "error",
-                    "message": "Failed to enqueue request. Please try again later.",
+                    "message": "Failed to process request. Please try again later.",
                 },
             )
-
-
-@app.get("/query/status/{job_id}")
-def query_status(job_id: str):
-    """
-    Poll the status/result of an async RAG query job.
-    """
-    from celery.result import AsyncResult
-
-    request_id = str(uuid.uuid4())
-    set_request_id(request_id)
-
-    with logfire.span("🔍 /query/status", job_id=job_id, request_id=request_id):
-        result = AsyncResult(job_id, app=run_rag_pipeline.app)
-        response = {
-            "job_id": job_id,
-            "request_id": request_id,
-            "status": result.status,
-        }
-
-        if result.ready():
-            if result.successful():
-                response["result"] = result.get()
-                logfire.info("✅ Job result returned", job_id=job_id, request_id=request_id)
-            else:
-                response["error"] = str(result.result)
-                logfire.warning("❌ Job failed", job_id=job_id, request_id=request_id, error=response["error"])
-
-    return response

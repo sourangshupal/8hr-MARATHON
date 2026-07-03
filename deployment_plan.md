@@ -23,17 +23,16 @@ Deploy the Enterprise Agentic RAG application on AWS using **Amazon ECS on Farga
 
 | Service | Container Command | Responsibility |
 |---|---|---|
-| **rag-api** | `uvicorn app.main:app --host 0.0.0.0 --port 8080` | Public HTTP API (`/query`, `/health`, `/ready`, `/metrics`, `/graph`) |
-| **rag-worker** | `celery -A app.tasks worker --loglevel=info -Q celery -c 4` | Async LangGraph RAG pipeline execution |
+| **rag-api** | `uvicorn app.main:app --host 0.0.0.0 --port 8080` | Public HTTP API (`/query`, `/health`, `/ready`, `/metrics`, `/graph`) and synchronous RAG execution |
 | **rag-ui** (optional) | `streamlit run ui/app.py --server.port 8501` | End-user chat interface |
 
-All three services use the **same Docker image** from Amazon ECR. Only the command differs.
+All services use the **same Docker image** from Amazon ECR. Only the command differs.
 
 ### 2.2 Managed Services (stateful)
 
 | Component | AWS Service | Purpose |
 |---|---|---|
-| **Redis** | Upstash Redis (managed) | Celery broker/backend + FastAPI rate-limit store |
+| **Redis** | Upstash Redis (managed) | FastAPI rate-limit store |
 | **Postgres** | Neon (managed PostgreSQL) | LangGraph checkpointer (conversation memory) |
 | **Qdrant** | Qdrant Cloud managed service | Vector database for retrieval |
 | **Secrets** | AWS Secrets Manager | API keys, DB URIs, Redis URL |
@@ -66,7 +65,6 @@ All three services use the **same Docker image** from Amazon ECR. Only the comma
 | `alb-sg` | 80/443 from internet | To `api-sg` and `ui-sg` |
 | `api-sg` | 8080 from `alb-sg` | Public internet for Neon, Upstash, Qdrant Cloud, and LLM APIs |
 | `ui-sg` | 8501 from `alb-sg` | `api-sg` (8080) |
-| `worker-sg` | None (private) | Public internet for Neon, Upstash, Qdrant Cloud, and LLM APIs |
 
 ---
 
@@ -87,20 +85,19 @@ Store all sensitive values in **AWS Secrets Manager** and inject them into task 
 - `RAG_API_KEY` (production auth)
 - `LOGFIRE_TOKEN`
 - `LANGSMITH_API_KEY`
-- `JUDGE_OPENAI_API_KEY` (optional) — Dedicated OpenAI key for RAGAS eval judge. Falls back to `OPENAI_API_KEY` if omitted; not required in the ECS API/worker task definitions.
+- `JUDGE_OPENAI_API_KEY` (optional) — Dedicated OpenAI key for RAGAS eval judge. Falls back to `OPENAI_API_KEY` if omitted; not required in the ECS API task definition.
 
 ### Plain environment variables
 
 - `QDRANT_COLLECTION=enterprise_rag`
 - `RATE_LIMIT_PER_MINUTE=60`
-- `PORTKEY_PRIMARY_CONFIG_ID` — system-generated `pc-...` ID of the primary saved config (preferred over the slug)
-- `PORTKEY_FALLBACK_CONFIG_ID` — system-generated `pc-...` ID of the fallback saved config (preferred over the slug)
+- `PORTKEY_PRIMARY_CONFIG_ID` — system-generated `pc-...` ID of the single saved config that contains primary and fallback targets
 - `PORTKEY_PRIMARY_SLUG` — human-readable name (`marathon-api`)
 - `PORTKEY_FALLBACK_SLUG` — human-readable name (`anthropic-fallback`)
 - `STRICT_STARTUP=true` (production only; set to `false` for local development)
 - `PYTHONUNBUFFERED=1`
 
-> **Note on Portkey configs:** Create saved configs in Portkey first. The gateway header `x-portkey-config-id` requires the system-generated `pc-...` ID, not the human-readable slug. Set `PORTKEY_PRIMARY_CONFIG_ID` and `PORTKEY_FALLBACK_CONFIG_ID` to those `pc-...` values. The slugs (`marathon-api`, `anthropic-fallback`) are kept for readability and as a fallback.
+> **Note on Portkey configs:** Create a single saved config in Portkey first. The gateway header `x-portkey-config-id` requires the system-generated `pc-...` ID, not the human-readable slug. Set `PORTKEY_PRIMARY_CONFIG_ID` to that `pc-...` value. The slugs (`marathon-api`, `anthropic-fallback`) are kept for readability and identify the providers inside the config targets.
 
 > **Note on `STRICT_STARTUP`:** When `true`, the FastAPI server refuses to start if any external dependency (Neon, Upstash, Qdrant, Portkey, Jina) is unreachable. Set to `false` locally so the app starts even if some services are optional.
 
@@ -282,20 +279,6 @@ Target tracking policies:
 
 **Scale:** min 2, max 10 tasks.
 
-### 8.2 rag-worker
-
-Celery uses Redis via Upstash. Upstash manages the Redis cluster, so no Redis-specific scaling infrastructure is required.
-
-**Option A — Custom CloudWatch metric (recommended):**
-
-- Deploy a small Lambda or sidecar that periodically publishes `CeleryQueueLength` to CloudWatch.
-- Scale the worker service on that metric.
-
-**Option B — Switch Celery broker to Amazon SQS:**
-
-- This is outside the scope of this plan. If you choose SQS later, change the Celery broker URL and use the native `ApproximateNumberOfMessagesVisible` metric for target tracking.
-
-**Scale:** min 1, max 20 tasks.
 
 ### 8.3 rag-ui
 
@@ -345,23 +328,6 @@ services:
     depends_on:
       - qdrant
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      QDRANT_URL: http://qdrant:6333
-      QDRANT_CLUSTER_ENDPOINT: http://qdrant:6333
-      QDRANT_API_KEY: ""
-      QDRANT_COLLECTION: enterprise_rag
-      RAG_API_KEY: ""
-      STRICT_STARTUP: "false"
-    env_file:
-      - .env
-    depends_on:
-      - qdrant
-    command: ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "2"]
 
   ui:
     build:
@@ -414,7 +380,6 @@ Set these in **Settings → Secrets and variables → Actions**:
 | `ECR_REPOSITORY` | ECR repository name (default: `enterprise-rag`) |
 | `ECS_CLUSTER` | ECS cluster name (default: `rag-cluster`) |
 | `ECS_SERVICE_API` | ECS service name for API (default: `rag-api`) |
-| `ECS_SERVICE_WORKER` | ECS service name for worker (default: `rag-worker`) |
 | `ECS_SERVICE_UI` | ECS service name for UI (default: `rag-ui`) |
 | `NEON_DB_URL_ARN` | Secrets Manager ARN for `NEON_DB_URL` |
 | `UPSTASH_REDIS_REST_URL_ARN` | Secrets Manager ARN for `UPSTASH_REDIS_REST_URL` |
@@ -435,7 +400,7 @@ Set these in **Settings → Secrets and variables → Actions**:
 3. Builds the Docker image tagged with the commit SHA and `latest`.
 4. Pushes both tags to ECR.
 5. Renders task-definition templates from `.aws/task-definitions/` by substituting placeholders with image URIs and secret ARNs.
-6. Deploys `rag-api`, `rag-worker`, and optionally `rag-ui` to ECS.
+6. Deploys `rag-api` and optionally `rag-ui` to ECS.
 7. Waits for each service to reach a stable state before continuing.
 
 ### Files added for CD
@@ -443,7 +408,6 @@ Set these in **Settings → Secrets and variables → Actions**:
 ```text
 .github/workflows/cd.yml
 .aws/task-definitions/rag-api.json
-.aws/task-definitions/rag-worker.json
 .aws/task-definitions/rag-ui.json
 ```
 
@@ -466,10 +430,8 @@ If using S3, download files into the task's ephemeral storage before running the
 1. **CloudWatch Logs:** all services log to `/ecs/<service>` log groups.
 2. **CloudWatch Alarms:**
    - `rag-api` 5xx error rate > 1%
-   - `rag-worker` task failures > threshold
 3. **Prometheus:** scrape `/metrics` from `rag-api`. Use Amazon Managed Prometheus or a self-hosted Prometheus sidecar.
 4. **Custom dashboard metrics:**
-   - Celery queue length
    - `/query` p50/p95 latency
    - Guardrails block rate
    - RAG answer token count
@@ -497,7 +459,7 @@ If using S3, download files into the task's ephemeral storage before running the
 5. Create Secrets Manager entries for all environment variables.
 6. Create IAM roles: `ecsTaskExecutionRole` and task-specific roles.
 7. Create the ECS cluster.
-8. Register task definitions for `rag-api`, `rag-worker`, and optional `rag-ui`.
+8. Register task definitions for `rag-api` and optional `rag-ui`.
 9. Create Application Load Balancer and target groups.
 10. Create ECS services with initial desired counts.
 11. Configure auto-scaling policies.

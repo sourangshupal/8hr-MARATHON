@@ -14,9 +14,8 @@ def test_query_open_when_no_api_key_configured():
     try:
         settings.API_KEY = None
         client = TestClient(app)
-        with patch("app.main.guard") as mock_guard, patch("app.main.run_rag_pipeline") as mock_task:
+        with patch("app.main.guard") as mock_guard:
             mock_guard.return_value = (True, "blocked")
-            mock_task.delay.return_value.id = "job-123"
             response = client.post("/query", json={"q": "hi"})
         assert response.json()["status"] == "Blocked by guardrails."
     finally:
@@ -46,9 +45,8 @@ def test_query_accepts_valid_api_key():
     try:
         settings.API_KEY = "super-secret"
         client = TestClient(app)
-        with patch("app.main.guard") as mock_guard, patch("app.main.run_rag_pipeline") as mock_task:
+        with patch("app.main.guard") as mock_guard:
             mock_guard.return_value = (True, "blocked")
-            mock_task.delay.return_value.id = "job-123"
             response = client.post(
                 "/query",
                 json={"q": "hi"},

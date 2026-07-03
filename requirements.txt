@@ -54,8 +54,7 @@ psycopg-pool                   # Connection pool for PostgresSaver
 psycopg-binary                 # PostgreSQL driver
 tenacity                       # Retry-with-backoff for external calls
 slowapi                        # Redis-backed API rate limiting (Limiter class)
-redis                          # Redis client for rate limiting & task queue
-celery                         # Distributed task queue for async graph runs
+redis                          # Redis client for rate limiting
 prometheus-client              # Prometheus metrics exposition
 prometheus-fastapi-instrumentator  # Automatic FastAPI request metrics
 

@@ -29,7 +29,6 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 # Import order is intentionally deferred so logfire/dotenv are configured first.
 "app/main.py" = ["E402"]
-"app/tasks.py" = ["E402"]
 "evals/app.py" = ["E402"]
 "evals/run_evals.py" = ["E402"]
 "evals/metrics.py" = ["E402"]

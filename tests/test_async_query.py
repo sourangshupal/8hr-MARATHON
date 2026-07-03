@@ -1,50 +1,47 @@
-"""Tests for async /query enqueue and status endpoints."""
+"""Tests for synchronous /query endpoint."""
 
 from unittest.mock import MagicMock, patch
 
-import celery.result
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 
-def test_query_returns_job_id():
-    """/query should enqueue a Celery task and return a job_id + poll URL."""
-    mock_task = MagicMock()
-    mock_task.id = "test-job-123"
+def test_query_returns_direct_answer():
+    """/query should run the pipeline synchronously and return the answer."""
+    mock_state = {
+        "final_answer": "hello",
+        "plan": ["Intent: Technical", "Search Term: hi"],
+        "status": "Response generated.",
+        "documents": ["doc1"],
+    }
+    mock_agent = MagicMock()
+    mock_agent.invoke.return_value = mock_state
+
+    # Ensure rag_agent exists on app.state before TestClient uses it.
+    app.state.rag_agent = mock_agent
 
     client = TestClient(app)
-    with patch("app.main.run_rag_pipeline.delay") as mock_delay:
-        mock_delay.return_value = mock_task
-        response = client.post("/query", json={"q": "hi"})
+    with patch("app.main.guard") as mock_guard:
+        mock_guard.return_value = (False, "")
+        response = client.post("/query", json={"q": "hi", "thread_id": "t1"})
 
     assert response.status_code == 200
     data = response.json()
-    assert data["job_id"] == "test-job-123"
-    assert data["status"] == "queued"
-    assert data["poll_url"] == "/query/status/test-job-123"
-    assert "request_id" in data
-    # request_id should be passed through to the Celery task as rag_request_id.
-    mock_delay.assert_called_once()
-    _, kwargs = mock_delay.call_args
-    assert kwargs.get("rag_request_id") == data["request_id"]
+    assert data["answer"] == "hello"
+    assert data["status"] == "Response generated."
+    assert data["sources"] == ["doc1"]
+    mock_agent.invoke.assert_called_once()
 
 
-def test_query_status_returns_completed_result():
-    """/query/status/{job_id} should return the task result when ready."""
-    mock_result = MagicMock()
-    mock_result.status = "SUCCESS"
-    mock_result.ready.return_value = True
-    mock_result.successful.return_value = True
-    mock_result.get.return_value = {"answer": "hello"}
-
+def test_query_blocks_guardrails():
+    """/query should return a blocked response when guardrails fire."""
     client = TestClient(app)
-    with patch.object(celery.result, "AsyncResult") as mock_async_result:
-        mock_async_result.return_value = mock_result
-        response = client.get("/query/status/test-job-123")
+    with patch("app.main.guard") as mock_guard:
+        mock_guard.return_value = (True, "Blocked message")
+        response = client.post("/query", json={"q": "bad prompt", "thread_id": "t2"})
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "SUCCESS"
-    assert data["result"]["answer"] == "hello"
-    assert "request_id" in data
+    assert data["status"] == "Blocked by guardrails."
+    assert data["answer"] == "Blocked message"

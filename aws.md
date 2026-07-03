@@ -405,7 +405,7 @@ export NEON_DB_URL_ARN=$(aws secretsmanager create-secret \
 
 export UPSTASH_REDIS_REST_URL_ARN=$(aws secretsmanager create-secret \
   --name "${PROJECT}/upstash-redis-rest-url" \
-  --description "Upstash Redis REST URL for Celery and rate limiting" \
+  --description "Upstash Redis REST URL for rate limiting" \
   --secret-string "$UPSTASH_REDIS_REST_URL" \
   --query 'ARN' --output text)
 

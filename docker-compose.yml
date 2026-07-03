@@ -30,22 +30,6 @@ services:
       - qdrant
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      QDRANT_URL: http://qdrant:6333
-      QDRANT_API_KEY: ""
-      QDRANT_COLLECTION: enterprise_rag
-      RAG_API_KEY: ""
-      LOGFIRE_IGNORE_NO_CONFIG: "1"
-    env_file:
-      - .env
-    depends_on:
-      - qdrant
-    command: ["celery", "-A", "app.tasks", "worker", "--loglevel=info", "-Q", "celery", "-c", "2"]
-
   ui:
     build:
       context: .

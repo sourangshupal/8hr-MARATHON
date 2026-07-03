@@ -11,8 +11,8 @@ A production-grade, enterprise-level RAG system built with **LangGraph**, **Port
 - **Jina AI Embeddings**: `jina-embeddings-v3` (1024-dim) via Jina API, with local `mxbai-embed-large-v1` fallback.
 - **Local Document Parsing**: PDF, HTML, TXT, DOCX, PPTX parsed entirely on-device — no external OCR service.
 - **Observability**: Full trace nesting with **Pydantic Logfire** and **LangSmith** across every agent node.
-- **Metrics**: Prometheus `/metrics` endpoint with custom RAG, guardrails, and Celery counters.
-- **Async Job Queue**: `/query` enqueues the LangGraph pipeline to Celery/Redis and returns a `job_id`; clients poll `/query/status/{job_id}`.
+- **Metrics**: Prometheus `/metrics` endpoint with custom RAG and guardrails counters.
+- **Synchronous `/query`**: The LangGraph pipeline runs directly inside the `/query` endpoint and returns the final answer.
 - **API Key & Rate Limiting**: Optional bearer-token auth and Redis-backed (or in-memory) rate limiting.
 - **Evaluation Suite**: RAGAS-powered eval pipeline (6 metrics) with a dedicated Streamlit demo app and a headless `evals/run_evals.py` script.
 
@@ -142,8 +142,7 @@ python -m app.ingestion.processor DATA --wipe
 
 ### 4. Launch the app
 
-The `/query` endpoint is now asynchronous: it enqueues work to Celery (backed by Upstash Redis) and returns a `job_id`.
-You need a Celery worker, the FastAPI server, and (optionally) the Streamlit UI. Redis and Postgres are managed by Upstash and Neon; no local persistence services are required.
+The `/query` endpoint runs the LangGraph pipeline synchronously. You only need the FastAPI server and (optionally) the Streamlit UI. Redis and Postgres are managed by Upstash and Neon; no local persistence services are required.
 
 > **Tip:** You can verify all external connections before starting the server:
 > ```bash
@@ -151,15 +150,10 @@ You need a Celery worker, the FastAPI server, and (optionally) the Streamlit UI.
 > ```
 
 ```powershell
-# Terminal 1 — Celery worker
-# On macOS, prefork can crash due to Objective-C fork-safety checks.
-# Use OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES or --pool=solo for local dev.
-celery -A app.tasks worker --loglevel=info -Q celery
-
-# Terminal 2 — FastAPI backend
+# Terminal 1 — FastAPI backend
 uvicorn app.main:app --reload --port 8000
 
-# Terminal 3 — Streamlit UI
+# Terminal 2 — Streamlit UI
 streamlit run ui/app.py
 ```
 
@@ -170,9 +164,7 @@ curl -X POST "http://localhost:8000/query" `
   -H "Content-Type: application/json" `
   -d '{"q": "How do I start Redis for a Kubernetes work queue?", "thread_id": "user-1"}'
 
-# Response: {"job_id": "...", "status": "queued", "poll_url": "/query/status/..."}
-
-curl "http://localhost:8000/query/status/<job_id>"
+# Response: {"question": "...", "answer": "...", "thought_process": [...], "status": "...", "sources": [...]}
 ```
 
 ### 6. Run the eval suite

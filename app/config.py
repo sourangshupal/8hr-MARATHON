@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # --- NEON SERVERLESS POSTGRES (LangGraph checkpointer) ---
     NEON_DB_URL: str
 
-    # --- UPSTASH REDIS (Celery broker/backend + rate limiting) ---
+    # --- UPSTASH REDIS (rate limiting) ---
     UPSTASH_REDIS_REST_URL: str
     UPSTASH_REDIS_REST_TOKEN: str
 
@@ -75,20 +75,12 @@ class Settings(BaseSettings):
         """TLS Redis URL derived from Upstash REST credentials.
 
         Upstash exposes the same host for REST and TLS Redis; the REST token is
-        also the Redis password. Celery and `limits` need a RESP-compatible URL,
-        so we build `rediss://default:<token>@<host>:6379/0`.
+        also the Redis password. `limits` uses it for rate limiting, so we build
+        `rediss://<token>@<host>/0`.
         """
         host = self.UPSTASH_REDIS_REST_URL.replace("https://", "").rstrip("/")
         token = quote(self.UPSTASH_REDIS_REST_TOKEN, safe="")
-        return f"rediss://default:{token}@{host}:6379/0?ssl_cert_reqs=required"
-
-    @property
-    def celery_broker_url(self) -> str:
-        return self.redis_url
-
-    @property
-    def celery_result_backend(self) -> str:
-        return self.redis_url
+        return f"rediss://{token}@{host}/0?ssl_cert_reqs=required"
 
 
 # Singleton used across the app.

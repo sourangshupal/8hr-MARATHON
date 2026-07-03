@@ -31,7 +31,7 @@ This document describes how to test the entire application locally, feature by f
 - An Upstash Redis database (REST URL + token set in `.env`)
 - Qdrant vector database (cloud endpoint is already configured in `.env`)
 - API keys set in `.env` (Groq, Gemini, Portkey, Logfire, etc.)
-- macOS users only: `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` is required for Celery prefork
+- macOS users only: no special fork-safety flag is needed (Celery has been removed)
 
 Install dependencies:
 
@@ -89,33 +89,9 @@ Expected: `20 passed`.
 
 ## 4. Start the Services
 
-You need three processes (Celery + FastAPI + optional UI). Redis and Postgres are now managed by Upstash and Neon, so no local persistence services are required.
+You need two processes (FastAPI + optional UI). Redis and Postgres are managed by Upstash and Neon, so no local persistence services are required.
 
-### Terminal 1 — Celery Worker
-
-On **macOS**, use the Objective-C fork-safety workaround:
-
-```bash
-source .venv/bin/activate
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES \
-  celery -A app.tasks worker --loglevel=info -Q celery
-```
-
-On **Linux**, the standard command is enough:
-
-```bash
-source .venv/bin/activate
-celery -A app.tasks worker --loglevel=info -Q celery
-```
-
-> **Tip:** On macOS you can also use `--pool=solo` to avoid prefork entirely:
-> ```bash
-> celery -A app.tasks worker --loglevel=info -Q celery --pool=solo
-> ```
-
-Expected log: `celery@... ready.` with no `SIGSEGV` / `SIGABRT`.
-
-### Terminal 2 — FastAPI Server
+### Terminal 1 — FastAPI Server
 
 ```bash
 source .venv/bin/activate
@@ -124,7 +100,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Expected: `Uvicorn running on http://0.0.0.0:8000`.
 
-### Terminal 3 — Streamlit UI (optional)
+### Terminal 2 — Streamlit UI (optional)
 
 ```bash
 source .venv/bin/activate
@@ -202,7 +178,7 @@ Eventually you should receive `429 Too Many Requests`.
 
 ---
 
-## 8. Async RAG Query Flow
+## 8. RAG Query Flow
 
 ### Submit a query
 
@@ -216,38 +192,15 @@ Expected response:
 
 ```json
 {
-  "job_id": "<uuid>",
-  "request_id": "<uuid>",
-  "status": "queued",
-  "poll_url": "/query/status/<job_id>"
+  "question": "How do I scale a Kubernetes deployment?",
+  "answer": "...",
+  "thought_process": [...],
+  "status": "Response generated.",
+  "sources": [...]
 }
 ```
 
-### Poll for the result
-
-```bash
-JOB_ID="<job_id_from_above>"
-curl http://localhost:8000/query/status/$JOB_ID
-```
-
-Status progression: `PENDING` → `STARTED` → `SUCCESS` / `FAILURE`.
-
-A successful result contains:
-
-```json
-{
-  "job_id": "...",
-  "request_id": "...",
-  "status": "SUCCESS",
-  "result": {
-    "question": "How do I scale a Kubernetes deployment?",
-    "answer": "...",
-    "thought_process": [...],
-    "status": "Response generated.",
-    "sources": [...]
-  }
-}
-```
+The pipeline now runs synchronously inside `/query`, so the final answer is returned immediately.
 
 ---
 
@@ -283,7 +236,7 @@ curl -X POST http://localhost:8000/query \
   -d '{"q":"hello","thread_id":"guard-test"}'
 ```
 
-Expected: immediate greeting response, no Celery job created.
+Expected: immediate greeting response returned directly by `/query`.
 
 ### Technical question (allowed)
 
@@ -320,7 +273,6 @@ Look for:
 - `rag_requests_total`
 - `guardrails_blocks_total`
 - `rag_request_duration_seconds`
-- `celery_jobs_total`
 
 ---
 
@@ -384,16 +336,6 @@ Verify that metrics (faithfulness, relevancy, etc.) are computed and reported.
 
 ## 15. Troubleshooting
 
-### Celery worker exits with `SIGSEGV` / `SIGABRT` on macOS
-
-You are hitting the Objective-C fork-safety issue. Start the worker with:
-
-```bash
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A app.tasks worker --loglevel=info -Q celery
-```
-
-or use `--pool=solo`.
-
 ### Postgres shows `unavailable` in `/ready`
 
 - Verify `NEON_DB_URL` is correct and the Neon project is active.
@@ -414,13 +356,10 @@ After the recent refactor, mocks must target `app.agents.graph.build_graph`, not
 ## Quick Reference
 
 ```bash
-# 1. Worker (macOS)
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A app.tasks worker --loglevel=info -Q celery
-
-# 2. API
+# 1. API
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# 3. Health + query
+# 2. Health + query
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/query -H "Content-Type: application/json" -d '{"q":"What is a Kubernetes pod?","thread_id":"t1"}'
 ```

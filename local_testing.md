@@ -101,28 +101,9 @@ If any check fails, fix `.env` before continuing.
 
 ## 2. Start the Application
 
-The application has two runtime components: the Celery worker and the FastAPI server. Both must be running for `/query` to work.
+The application runs as a single FastAPI process. The RAG pipeline is executed synchronously inside the `/query` endpoint, so no separate worker is needed.
 
-### 2.1 Start the Celery worker
-
-```bash
-source .venv/bin/activate
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A app.tasks worker --loglevel=info -Q celery
-```
-
-On macOS the `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` prefix prevents fork-safety crashes.
-
-You should see:
-
-```text
-[2026-07-02 ...] Celery worker is ready.
-...
-🛡️ Celery worker initialized guardrails.
-```
-
-### 2.2 Start the FastAPI server
-
-In a **new terminal tab**:
+### 2.1 Start the FastAPI server
 
 ```bash
 cd /Users/sourangshupal/Downloads/8hr-MARATHON
@@ -141,7 +122,7 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-### 2.3 Verify the running services
+### 2.2 Verify the running services
 
 ```bash
 curl http://localhost:8000/health
@@ -205,35 +186,17 @@ Response:
 
 ```json
 {
-  "job_id": "...",
-  "request_id": "...",
-  "status": "queued",
-  "poll_url": "/query/status/..."
+  "question": "What is a Kubernetes pod?",
+  "answer": "...",
+  "thought_process": [...],
+  "status": "Response generated.",
+  "sources": [...]
 }
 ```
 
-### 4.3 Poll for the result
+The pipeline now runs synchronously inside `/query`, so there is no separate `job_id` or polling step.
 
-```bash
-curl http://localhost:8000/query/status/<job_id> | python -m json.tool
-```
-
-Wait 20–60 seconds. A successful result looks like:
-
-```json
-{
-  "status": "SUCCESS",
-  "result": {
-    "question": "What is a Kubernetes pod?",
-    "answer": "...",
-    "thought_process": [...],
-    "status": "Response generated.",
-    "sources": [...]
-  }
-}
-```
-
-### 4.4 Test with RAG_API_KEY enabled
+### 4.3 Test with RAG_API_KEY enabled
 
 If you set `RAG_API_KEY=my-secret-key` in `.env`, all `/query` calls must include it:
 
@@ -277,13 +240,13 @@ open /tmp/graph.png
 
 ### 5.1 Redis / Upstash
 
-Confirm Celery and rate limiting are using Redis:
+Confirm rate limiting is using Redis:
 
 ```bash
 python -m app.services.health.connection_checker
 ```
 
-You can also inspect the Celery broker directly with `redis-cli`:
+You can also inspect Redis directly with `redis-cli`:
 
 ```bash
 redis-cli -u "$(python -c 'from app.config import settings; print(settings.redis_url)')" ping
@@ -350,62 +313,6 @@ print(resp.choices[0].message.content)
 
 ---
 
-## 6. Celery Worker (the "salary" component)
-
-"Salary" in the conversation refers to the **Celery worker**, the background process that executes the RAG pipeline.
-
-### 6.1 When to restart the Celery worker
-
-You **must restart** the Celery worker whenever you change Python code that the worker imports, including:
-
-- `app/tasks.py`
-- `app/agents/` (graph, nodes, state)
-- `app/services/` (retrieval, embedding, ranking)
-- `app/gateway/client.py`
-- `app/config.py`
-- `app/guardrails/`
-
-You **do not** need to restart the worker for changes that only affect the FastAPI process, such as `app/main.py` or route handlers.
-
-### 6.2 How to restart
-
-Stop the worker with `Ctrl+C`, then start it again:
-
-```bash
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A app.tasks worker --loglevel=info -Q celery
-```
-
-### 6.3 Inspect Celery tasks
-
-List active tasks:
-
-```bash
-celery -A app.tasks inspect active
-```
-
-List scheduled/revoked tasks:
-
-```bash
-celery -A app.tasks inspect scheduled
-celery -A app.tasks inspect revoked
-```
-
-Purge the queue (useful during testing):
-
-```bash
-celery -A app.tasks purge
-```
-
-### 6.4 Worker logs
-
-If you started the worker in the background:
-
-```bash
-tail -f /tmp/celery.log
-```
-
----
-
 ## 7. Common Issues and Fixes
 
 | Symptom | Cause | Fix |
@@ -429,7 +336,6 @@ To kill background processes:
 
 ```bash
 pkill -f "uvicorn app.main:app"
-pkill -f "celery -A app.tasks"
 ```
 
 ---
@@ -437,10 +343,8 @@ pkill -f "celery -A app.tasks"
 ## 9. Quick Smoke-Test Checklist
 
 - [ ] `python -m app.services.health.connection_checker` reports all green
-- [ ] Celery worker starts without errors
 - [ ] FastAPI server starts and `/ready` returns `"status": "ready"`
 - [ ] `python -m app.ingestion.processor DATA --wipe` completes
-- [ ] `POST /query` returns a `job_id`
-- [ ] `GET /query/status/{job_id}` eventually returns `SUCCESS` with an answer and sources
+- [ ] `POST /query` returns an answer and sources synchronously
 - [ ] `/metrics` returns Prometheus metrics
 - [ ] Rate limiting returns `429` after exceeding the limit
