@@ -55,7 +55,10 @@ def _init_rate_limiter():
 
     try:
         storage = RedisStorage(settings.redis_url)
-        storage.check()  # raises if Redis is unreachable
+        # `storage.check()` returns False silently on some failures; ping the
+        # underlying Redis client so we only use Redis when it is really reachable.
+        if not storage.check() or not storage.storage.ping():
+            raise ConnectionError("Redis did not respond to ping")
         app.state.limiter = Limiter(key_func=get_remote_address, storage_uri=settings.redis_url)
         app.state.rate_limiter_storage = "redis"
         logfire.info("🚦 Rate limiting initialized via Redis.")
