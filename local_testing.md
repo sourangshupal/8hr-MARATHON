@@ -50,9 +50,8 @@ Required variables in `.env`:
 | `JINA_API_KEY` | Embeddings (`jina-embeddings-v3`) and reranker (`jina-reranker-v3`) | Jina AI |
 | `PORTKEY_API_KEY` | LLM gateway authentication | Portkey dashboard |
 | `PORTKEY_PRIMARY_SLUG` | Human-readable name of your primary Portkey config | Portkey dashboard |
-| `PORTKEY_FALLBACK_SLUG` | Human-readable name of your fallback Portkey config | Portkey dashboard |
-| `PORTKEY_PRIMARY_CONFIG_ID` | System-generated `pc-...` ID of the primary config | Portkey dashboard or `scripts/list_portkey_configs.py` |
-| `PORTKEY_FALLBACK_CONFIG_ID` | System-generated `pc-...` ID of the fallback config | Portkey dashboard or `scripts/list_portkey_configs.py` |
+| `PORTKEY_FALLBACK_SLUG` | Human-readable name of your fallback Portkey provider in Portkey Model Catalog | Portkey dashboard |
+| `PORTKEY_PRIMARY_CONFIG_ID` | System-generated `pc-...` ID of the single saved config that contains primary + fallback targets | Portkey dashboard or `scripts/list_portkey_configs.py` |
 | `QDRANT_CLUSTER_ENDPOINT` | Qdrant URL | Qdrant Cloud |
 | `QDRANT_API_KEY` | Qdrant API key | Qdrant Cloud |
 | `NEON_DB_URL` | Postgres URL for LangGraph checkpointer | Neon dashboard |
@@ -62,13 +61,19 @@ Required variables in `.env`:
 | `LOGFIRE_TOKEN` | Optional Pydantic Logfire token | Logfire dashboard |
 | `LANGSMITH_API_KEY` | Optional LangSmith tracing key | LangSmith dashboard |
 
-> **Note on Portkey config IDs:** The gateway health check sends `x-portkey-config-id`. Portkey expects the system-generated `pc-...` ID here, not the human-readable slug. If you are unsure of the IDs, run:
+> **Note on Portkey config IDs:** The gateway references a single saved Portkey config that contains both the primary and fallback targets. Portkey expects the system-generated `pc-...` ID, not the human-readable slug. The value in `.env` must have **no spaces around `=`** and **no quotes**:
+>
+> ```env
+> PORTKEY_PRIMARY_CONFIG_ID=pc-xxxxxxxxxxxxxxxx
+> ```
+>
+> If you are unsure of the ID, run:
 >
 > ```bash
 > PYTHONPATH=. python scripts/list_portkey_configs.py
 > ```
 >
-> Then copy the `pc-...` IDs into `.env` as `PORTKEY_PRIMARY_CONFIG_ID` and `PORTKEY_FALLBACK_CONFIG_ID`.
+> Then copy the `pc-...` ID into `.env` as `PORTKEY_PRIMARY_CONFIG_ID`.
 
 ### 1.5 Validate the environment
 
@@ -407,7 +412,7 @@ tail -f /tmp/celery.log
 |---|---|---|
 | `logfire.exceptions.LogfireConfigError` during ingestion | `LOGFIRE_TOKEN` is empty and `logfire.configure()` was called | Fixed: ingestion now skips Logfire configuration when `LOGFIRE_TOKEN` is unset. Pull latest code. |
 | `PostgresSaver.setup() takes 1 positional argument but 2 were given` | `app/main.py` called `setup()` twice | Fixed: redundant `checkpointer.setup()` removed from startup. Pull latest code. |
-| Portkey `inline_config_blocked` or `Invalid config passed` | Using slug instead of `pc-...` config ID | Set `PORTKEY_PRIMARY_CONFIG_ID` and `PORTKEY_FALLBACK_CONFIG_ID` to the `pc-...` values from Portkey. |
+| Portkey `inline_config_blocked` or `Invalid config passed` | Inline configs are disabled on this workspace; or the saved-config ID is wrong/malformed | Use the real `pc-...` ID for `PORTKEY_PRIMARY_CONFIG_ID`, with no spaces and no quotes. |
 | `rolling back returned connection` warning | Psycopg pool puts back an in-transaction connection | Harmless warning from the health-check pool; connection is rolled back safely. |
 | Ingestion uses fallback embeddings instead of Jina | `JINA_API_KEY` missing or probe timed out | Check `.env` and rerun `python -m app.services.health.connection_checker`. |
 | `429 Too Many Requests` | Rate limit exceeded | Wait one minute or increase `RATE_LIMIT_PER_MINUTE` in `.env`. |

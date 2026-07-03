@@ -1,10 +1,10 @@
 """List saved Portkey configs and their system-generated pc-... IDs.
 
 Run:
-    python scripts/list_portkey_configs.py
+    PYTHONPATH=. python scripts/list_portkey_configs.py
 
 The output shows the human-readable slug and the `id` you need for
-PORTKEY_PRIMARY_CONFIG_ID / PORTKEY_FALLBACK_CONFIG_ID in `.env`.
+PORTKEY_PRIMARY_CONFIG_ID in `.env`.
 """
 
 import sys
@@ -53,9 +53,8 @@ def main() -> int:
         status = cfg.get("status", "n/a")
         print(f"{cfg_id:<30} {slug:<30} {status:<10}")
     print("-" * 70)
-    print("\nAdd the desired IDs to .env:")
+    print("\nAdd the desired ID to .env (no spaces, no quotes):")
     print("  PORTKEY_PRIMARY_CONFIG_ID=pc-xxxxxxxx")
-    print("  PORTKEY_FALLBACK_CONFIG_ID=pc-yyyyyyyy")
     return 0
 
 
