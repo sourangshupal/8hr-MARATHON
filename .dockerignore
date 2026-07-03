@@ -40,9 +40,6 @@ DATA/
 # Eval suite — runs locally only, not in Cloud Run
 evals/
 
-# Streamlit UI — runs locally, not served by Cloud Run
-ui/
-
 # Notebooks & docs — not needed at runtime
 notebooks/
 DOCS/

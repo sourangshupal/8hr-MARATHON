@@ -75,8 +75,18 @@ class Settings(BaseSettings):
 
     @property
     def postgres_uri(self) -> str:
-        """LangGraph Postgres checkpointer URI (Neon)."""
-        return self.NEON_DB_URL
+        """LangGraph Postgres checkpointer URI (Neon).
+
+        Serverless Postgres closes idle connections, so append TCP keepalive
+        options to keep the connection pool healthy between requests.
+        """
+        base = self.NEON_DB_URL.rstrip("/")
+        keepalive = (
+            "keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5"
+        )
+        if "?" in base:
+            return f"{base}&{keepalive}"
+        return f"{base}?{keepalive}"
 
     @property
     def redis_url(self) -> str:

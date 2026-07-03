@@ -12,8 +12,11 @@ WORKDIR /app
 COPY requirements-prod.txt .
 RUN pip install --no-cache-dir --prefer-binary -r requirements-prod.txt
 
-# Copy only the app package — everything else (evals/, ui/, DATA/, DOCS/) stays out
+# Copy only the app package — everything else (evals/, DATA/, DOCS/) stays out
 COPY app/ ./app/
+
+# Copy the Streamlit UI so the same image can run the rag-ui ECS service.
+COPY ui/ ./ui/
 
 # Expose the port documented in the task definitions and health checks.
 EXPOSE 8080
