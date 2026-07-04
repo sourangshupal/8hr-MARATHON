@@ -6,7 +6,10 @@ import logfire
 
 from app.config import settings
 
-logfire.configure(token=settings.LOGFIRE_TOKEN)
+logfire.configure(
+    token=settings.LOGFIRE_TOKEN,
+    **({"base_url": settings.LOGFIRE_BASE_URL} if settings.LOGFIRE_BASE_URL else {}),
+)
 
 # Now safe to import app modules - logfire is already active
 import time

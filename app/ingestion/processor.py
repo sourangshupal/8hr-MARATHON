@@ -3,24 +3,26 @@ import os
 import sys
 import uuid
 
+# logfire must be configured before app module imports so spans from
+# chunking/loaders/embedding are captured from the start.
 import logfire
+from app.config import settings
+
+if settings.LOGFIRE_TOKEN:
+    logfire.configure(
+        token=settings.LOGFIRE_TOKEN,
+        service_name="enterprise-ingestion-service",
+        **({"base_url": settings.LOGFIRE_BASE_URL} if settings.LOGFIRE_BASE_URL else {}),
+    )
+
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-from app.config import settings
 from app.ingestion.chunking.splitter import chunk_text
 from app.ingestion.loaders.html import parse_html
 from app.ingestion.loaders.pdf import parse_pdf
 from app.ingestion.loaders.text import parse_text
 from app.services.retrieval.embedding import embed_texts, get_embedding_dim
-
-# Configure Logfire only when a token is available so ingestion can run locally
-# without a Logfire project. Match the main app's behavior.
-if settings.LOGFIRE_TOKEN:
-    logfire.configure(
-        token=settings.LOGFIRE_TOKEN,
-        service_name="enterprise-ingestion-service",
-    )
 
 # Local folder where parsed + chunked JSON metadata is saved (replaces GCS processed bucket)
 PROCESSED_DATA_DIR = "processed_data"

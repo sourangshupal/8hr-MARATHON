@@ -46,6 +46,7 @@ def _check_neon_postgres() -> ConnectionResult:
             max_size=2,
             open=True,
             timeout=5,
+            check=ConnectionPool.check_connection,
         )
         conn = pool.getconn(timeout=5)
         with conn.transaction():
@@ -174,6 +175,36 @@ def _check_jina_reranker() -> ConnectionResult:
         return ConnectionResult("jina_reranker", False, str(e))
 
 
+def _check_logfire() -> ConnectionResult:
+    """Verify Logfire is configured with a token.
+
+    logfire.configure() already ran at process start; token presence confirms
+    the SDK is active. A missing token means all spans are silently dropped.
+    """
+    if not settings.LOGFIRE_TOKEN:
+        return ConnectionResult("logfire", False, "LOGFIRE_TOKEN not set — spans dropped")
+    return ConnectionResult("logfire", True, "Logfire configured")
+
+
+def _check_langsmith() -> ConnectionResult:
+    """Verify LangSmith API key is valid and the endpoint is reachable."""
+    if not settings.LANGSMITH_API_KEY:
+        return ConnectionResult("langsmith", False, "LANGSMITH_API_KEY not set — tracing disabled")
+    try:
+        response = requests.get(
+            f"{settings.LANGSMITH_ENDPOINT}/ok",
+            headers={"x-api-key": settings.LANGSMITH_API_KEY},
+            timeout=5,
+        )
+        response.raise_for_status()
+        return ConnectionResult(
+            "langsmith", True, f"LangSmith reachable (project: {settings.LANGSMITH_PROJECT})"
+        )
+    except Exception as e:
+        logfire.warning(f"LangSmith health check failed: {e}")
+        return ConnectionResult("langsmith", False, str(e))
+
+
 # Ordered list of all checks to run during startup and /ready.
 _CHECKERS: list[Callable[[], ConnectionResult]] = [
     _check_neon_postgres,
@@ -182,6 +213,8 @@ _CHECKERS: list[Callable[[], ConnectionResult]] = [
     _check_portkey_gateway,
     _check_jina_embeddings,
     _check_jina_reranker,
+    _check_logfire,
+    _check_langsmith,
 ]
 
 

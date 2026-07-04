@@ -55,6 +55,7 @@ class Settings(BaseSettings):
 
     # --- OBSERVABILITY ---
     LOGFIRE_TOKEN: str | None = None
+    LOGFIRE_BASE_URL: str | None = None  # e.g. https://logfire-eu.pydantic.dev for EU tokens
     LANGSMITH_TRACING: str = "true"
     LANGSMITH_API_KEY: str | None = None
     LANGSMITH_PROJECT: str = "rag_scale_test"
@@ -105,10 +106,14 @@ settings = Settings()
 
 
 def apply_langchain_env():
-    """Write LangSmith/LangChain settings to os.environ for automatic tracing."""
-    if settings.LANGSMITH_TRACING:
+    """Write LangSmith/LangChain settings to os.environ for automatic tracing.
+
+    Tracing is only activated when both LANGSMITH_TRACING and LANGSMITH_API_KEY
+    are set — enabling tracing without a key causes LangChain to emit 401 noise
+    on every LangGraph step.
+    """
+    if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
         os.environ.setdefault("LANGCHAIN_TRACING_V2", settings.LANGSMITH_TRACING)
-    if settings.LANGSMITH_API_KEY:
         os.environ.setdefault("LANGCHAIN_API_KEY", settings.LANGSMITH_API_KEY)
     if settings.LANGSMITH_PROJECT:
         os.environ.setdefault("LANGCHAIN_PROJECT", settings.LANGSMITH_PROJECT)

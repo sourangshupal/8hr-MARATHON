@@ -1,21 +1,24 @@
 FROM python:3.11-slim-bookworm
 
-# Patch OS-level CVEs, then install system deps required by torch and native packages
+# Pull uv binary from the official image — no pip install needed.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Patch OS-level CVEs, then install system deps required by torch and native packages.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     gcc g++ libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy requirements first so pip install is a cached layer.
-# Re-runs only when requirements.txt changes, not on every code change.
-COPY requirements-prod.txt .
-RUN pip install --no-cache-dir --prefer-binary -r requirements-prod.txt
+# Layer: install dependencies only (cached until pyproject.toml changes).
+# tomllib (stdlib in 3.11+) extracts [project.dependencies] so we can
+# install deps without copying source — preserves cache on code-only changes.
+# uv prefers binary wheels by default (no --prefer-binary flag needed).
+COPY pyproject.toml .
+RUN python3 -c "import tomllib,subprocess; deps=tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']; subprocess.run(['uv','pip','install','--system','--no-cache']+deps,check=True)"
 
-# Copy only the app package — everything else (evals/, DATA/, DOCS/) stays out
+# Layer: copy source — only invalidates on code changes, not dep changes.
 COPY app/ ./app/
-
-# Copy the Streamlit UI so the same image can run the rag-ui ECS service.
 COPY ui/ ./ui/
 
 # Expose the port documented in the task definitions and health checks.
