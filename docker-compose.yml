@@ -38,6 +38,8 @@ services:
     environment:
       BACKEND_URL: http://api:8080
       LOGFIRE_IGNORE_NO_CONFIG: "1"
+    env_file:
+      - .env
     volumes:
       - ./ui:/app/ui:ro
     depends_on:

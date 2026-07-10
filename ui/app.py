@@ -13,13 +13,22 @@ load_dotenv(dotenv_path=env_path)
 
 
 # Initialize Logfire
+LOGFIRE_STATUS = "Unknown"
 try:
     token = os.getenv("LOGFIRE_TOKEN")
+    base_url = os.getenv("LOGFIRE_BASE_URL")
+    # EU Logfire v2 tokens must hit the EU endpoint.
+    if not base_url and token and token.startswith("pylf_v2_eu_"):
+        base_url = "https://logfire-eu.pydantic.dev"
     if not token:
         print("ERROR: LOGFIRE_TOKEN is empty or None!")
-    logfire.configure(token=token)
-    # logfire.instrument_requests() # Disabled due to OpenTelemetry bug on Windows: MeterProvider.get_meter() got multiple values for argument 'version'
-    LOGFIRE_STATUS = "Connected & Tracing"
+        LOGFIRE_STATUS = "Standby (LOGFIRE_TOKEN not set)"
+    else:
+        logfire.configure(
+            token=token,
+            advanced=logfire.AdvancedOptions(base_url=base_url) if base_url else None,
+        )
+        LOGFIRE_STATUS = "Connected & Tracing"
 except Exception as e:
     print(f"Logfire Init Error in UI: {e}")
     LOGFIRE_STATUS = f"Standby (Error: {e})"
@@ -88,13 +97,20 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                         url = f"{base_url}/query"
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
-                        response = requests.post(url, json=payload, timeout=60)
+                        # First guardrails invocation can be slow as NeMo downloads
+                        # configs/models; allow up to 3 minutes.
+                        response = requests.post(url, json=payload, timeout=180)
                         data = response.json()
 
-                    # Guardrails can block synchronously without creating a job.
+                    # Guardrails can block synchronously.
                     if data.get("status") == "Blocked by guardrails.":
                         status.update(label="🛡️ Blocked by guardrails", state="complete", expanded=False)
                         full_answer = data.get("answer", "Blocked by guardrails.")
+                    # Modern synchronous response: answer + thought_process + sources.
+                    elif "answer" in data:
+                        status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
+                        full_answer = data.get("answer", "No response.")
+                    # Legacy async polling path (kept for compatibility).
                     elif "job_id" in data:
                         job_id = data["job_id"]
                         poll_url = f"{base_url}/query/status/{job_id}"
@@ -116,6 +132,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         if isinstance(result_data, dict):
                             data = result_data
                             status.update(label="✅ Answer Synthesized", state="complete", expanded=False)
+                            full_answer = data.get("answer", "No response.")
                         else:
                             raise RuntimeError(f"RAG job failed: {result_data}")
                     else:
