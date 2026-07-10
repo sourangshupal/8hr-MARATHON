@@ -197,9 +197,7 @@ def _check_langsmith() -> ConnectionResult:
             timeout=5,
         )
         response.raise_for_status()
-        return ConnectionResult(
-            "langsmith", True, f"LangSmith reachable (project: {settings.LANGSMITH_PROJECT})"
-        )
+        return ConnectionResult("langsmith", True, f"LangSmith reachable (project: {settings.LANGSMITH_PROJECT})")
     except Exception as e:
         logfire.warning(f"LangSmith health check failed: {e}")
         return ConnectionResult("langsmith", False, str(e))
