@@ -1,11 +1,11 @@
 import os
-import streamlit as st
-import requests
 import time
 import uuid
-import logfire
-from dotenv import load_dotenv
 
+import logfire
+import requests
+import streamlit as st
+from dotenv import load_dotenv
 
 # Load environment variables explicitly from the root directory
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -32,7 +32,6 @@ try:
 except Exception as e:
     print(f"Logfire Init Error in UI: {e}")
     LOGFIRE_STATUS = f"Standby (Error: {e})"
-    
 
 
 # --- PAGE CONFIG ---
@@ -62,7 +61,7 @@ with st.sidebar:
     st.markdown("---")
     st.success(f"Logfire: {LOGFIRE_STATUS}")
     st.info(f"Memory ID: {st.session_state.session_id[:8]}")
-    
+
     if st.button("🗑️ Clear History & Memory", width="stretch", type="primary"):
         logfire.warn(f"🗑️ Memory Wipe Triggered for session: {st.session_state.session_id}")
         st.session_state.messages = []
@@ -83,7 +82,6 @@ for message in st.session_state.messages:
 if prompt := st.chat_input("Ask about your documentation..."):
     # START TRACE: User Interaction
     with logfire.span("💬 User Chat Interaction", user_query=prompt, session_id=st.session_state.session_id):
-        
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar=USER_AVATAR):
             st.markdown(prompt)
@@ -97,9 +95,13 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                         url = f"{base_url}/query"
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
+                        headers = {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {os.getenv('RAG_API_KEY', '')}",
+                        }
                         # First guardrails invocation can be slow as NeMo downloads
                         # configs/models; allow up to 3 minutes.
-                        response = requests.post(url, json=payload, timeout=180)
+                        response = requests.post(url, json=payload, headers=headers, timeout=180)
                         data = response.json()
 
                     # Guardrails can block synchronously.
@@ -118,7 +120,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         max_attempts = 60
                         for attempt in range(max_attempts):
                             with logfire.span("🔄 Polling RAG job", job_id=job_id, attempt=attempt):
-                                poll_resp = requests.get(poll_url, timeout=30)
+                                poll_resp = requests.get(poll_url, headers=headers, timeout=30)
                                 poll_resp.raise_for_status()
                                 poll_data = poll_resp.json()
                             job_status = poll_data.get("status", "UNKNOWN")
@@ -149,7 +151,7 @@ if prompt := st.chat_input("Ask about your documentation..."):
                         with st.expander("📄 View Retrieved Context (Sources)"):
                             for i, source in enumerate(sources):
                                 preview = source[:100].replace("\n", " ") + "..."
-                                with st.expander(f"Chunk {i+1}: {preview}"):
+                                with st.expander(f"Chunk {i + 1}: {preview}"):
                                     st.info(source)
                 except Exception as e:
                     logfire.error(f"❌ UI-Backend Connection Failed: {e}")

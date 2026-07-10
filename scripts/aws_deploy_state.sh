@@ -21,5 +21,5 @@ ALB_DNS=rag-alb-553953380.us-east-1.elb.amazonaws.com
 API_TG_ARN=arn:aws:elasticloadbalancing:us-east-1:685057748560:targetgroup/rag-api-tg/37aa263c275b7957
 UI_TG_ARN=arn:aws:elasticloadbalancing:us-east-1:685057748560:targetgroup/rag-ui-tg/9abef207b6937445
 LISTENER_ARN=arn:aws:elasticloadbalancing:us-east-1:685057748560:listener/app/rag-alb/2a4b63bfa9f2540c/2a7e6d9b8d391dcc
-RAG_API_TASK_DEF_ARN=arn:aws:ecs:us-east-1:685057748560:task-definition/rag-api:6
-RAG_UI_TASK_DEF_ARN=arn:aws:ecs:us-east-1:685057748560:task-definition/rag-ui:7
+RAG_API_TASK_DEF_ARN=arn:aws:ecs:us-east-1:685057748560:task-definition/rag-api:9
+RAG_UI_TASK_DEF_ARN=arn:aws:ecs:us-east-1:685057748560:task-definition/rag-ui:9
