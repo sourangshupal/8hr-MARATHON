@@ -13,6 +13,7 @@ env:
   ECS_CLUSTER: ${{ secrets.ECS_CLUSTER || 'rag-cluster' }}
   ECS_SERVICE_API: ${{ secrets.ECS_SERVICE_API || 'rag-api' }}
   ECS_SERVICE_UI: ${{ secrets.ECS_SERVICE_UI || 'rag-ui' }}
+  BACKEND_URL: ${{ secrets.BACKEND_URL }}
 
 jobs:
   deploy:
@@ -64,6 +65,7 @@ jobs:
             sed \
               -e "s|<IMAGE_NAME>|$IMAGE_URI|g" \
               -e "s|<AWS_REGION>|$AWS_REGION|g" \
+              -e "s|<BACKEND_URL>|$BACKEND_URL|g" \
               -e "s|<NEON_DB_URL_ARN>|$NEON_DB_URL_ARN|g" \
               -e "s|<UPSTASH_REDIS_REST_URL_ARN>|$UPSTASH_REDIS_REST_URL_ARN|g" \
               -e "s|<UPSTASH_REDIS_REST_TOKEN_ARN>|$UPSTASH_REDIS_REST_TOKEN_ARN|g" \
