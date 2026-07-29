@@ -11,19 +11,19 @@ _rails: LLMRails | None = None
 def initialize_rails() -> None:
     """
     Build the NeMo LLMRails singleton at app startup.
-    Uses OpenAI gpt-5-mini for fast intent classification at the gate.
+    Uses OpenAI gpt-4o-mini for fast intent classification at the gate.
     """
     global _rails
 
-    guard_llm = ChatOpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-5-mini")
+    guard_llm = ChatOpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-4o-mini")
 
     config = RailsConfig.from_content(colang_content=COLANG_CONTENT, yaml_content=YAML_CONTENT)
 
     _rails = LLMRails(config, llm=guard_llm)
-    logfire.info("🛡️ NeMo Guardrails initialised (gpt-5-mini).")
+    logfire.info("🛡️ NeMo Guardrails initialised (gpt-4o-mini).")
 
 
-def guard(message: str) -> tuple[bool, str | None]:
+async def guard(message: str) -> tuple[bool, str | None]:
     """
     Run a user message through the NeMo rails gate.
 
@@ -37,7 +37,7 @@ def guard(message: str) -> tuple[bool, str | None]:
         return False, None
 
     with logfire.span("🛡️ Guardrails Check"):
-        result = _rails.generate(messages=[{"role": "user", "content": message}])
+        result = await _rails.generate_async(messages=[{"role": "user", "content": message}])
 
         # NeMo returns {'role': 'assistant', 'content': '...'} — extract text
         content = result.get("content", "") if isinstance(result, dict) else str(result)
@@ -50,3 +50,4 @@ def guard(message: str) -> tuple[bool, str | None]:
 
         logfire.info("✅ Guardrails passed.")
         return False, None
+
