@@ -101,7 +101,7 @@ YAML_CONTENT = """
 models:
   - type: main
     engine: openai
-    model: gpt-3.5-turbo
+    model: gpt-4o-mini
 
 instructions:
   - type: general
@@ -117,9 +117,13 @@ instructions:
 # If the guardrail response contains any of these, a rail has fired.
 # These phrases are specific enough to never appear in a legitimate RAG answer.
 RAIL_INDICATORS = [
-    "can't help with that — but ask me anything technical",
-    "I maintain consistent guidelines regardless of how I am prompted",
+    "can't help with that",
+    "topics related to Kubernetes",
+    "I maintain consistent guidelines",
+    "regardless of how I am prompted",
     "Hello! I'm your Enterprise IT Assistant",
-    "Goodbye! Feel free to return whenever you have more enterprise IT questions",
-    "I'm an Enterprise AI Assistant with deep expertise in",
+    "Goodbye! Feel free to return",
+    "I'm an Enterprise AI Assistant",
+    "Enterprise IT Assistant",
 ]
+

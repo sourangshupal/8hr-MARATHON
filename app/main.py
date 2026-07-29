@@ -1,7 +1,8 @@
-# ============================================================
-# CRITICAL: logfire MUST be configured before ALL other imports
-# so that spans from all modules are captured from the start.
-# ============================================================
+import warnings
+
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+warnings.filterwarnings("ignore", message=".*allowed_objects.*")
+
 import logfire
 
 from app.config import settings
@@ -24,6 +25,8 @@ import time
 import uuid
 from typing import Optional
 
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -35,6 +38,7 @@ from app.agents.graph import build_graph
 from app.guardrails import guard, initialize_rails
 from app.health import router as health_router
 from app.logging import set_request_id
+from app.services.cache_service import get_cached_response, set_cached_response
 from app.services.health.connection_checker import check_all_connections, log_connection_summary
 
 # Custom Prometheus metrics
@@ -155,16 +159,8 @@ def rate_limit(times: int = None, seconds: int = None):
     return app_limiter.limit(_resolve_rule)
 
 
-# Initialize FastAPI
-app = FastAPI(title="Enterprise Agentic RAG API")
-app.include_router(health_router)
-
-# Expose Prometheus metrics at /metrics with default request instrumentation.
-Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
-
-
-@app.on_event("startup")
-def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     initialize_rails()
 
     # Build the agent graph with the production checkpointer (Postgres by default).
@@ -181,6 +177,16 @@ def startup_event():
 
     if not settings.API_KEY:
         logfire.warning("🔓 RAG_API_KEY is not set — /query is open to anyone. Set it in production.")
+
+    yield
+
+
+# Initialize FastAPI
+app = FastAPI(title="Enterprise Agentic RAG API", lifespan=lifespan)
+app.include_router(health_router)
+
+# Expose Prometheus metrics at /metrics with default request instrumentation.
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 
 class QueryRequest(BaseModel):
@@ -207,7 +213,7 @@ def get_graph_image(_api_key: str = Depends(verify_api_key)):
 
 @app.post("/query")
 @rate_limit()
-def query(
+async def query(
     request: Request,
     body: QueryRequest,
     _api_key: str = Depends(verify_api_key),
@@ -223,8 +229,9 @@ def query(
 
     start = time.perf_counter()
     with logfire.span("🔍 /query", request_id=request_id, thread_id=thread_id):
-        # Gate: run guardrails synchronously so blocked requests never run the graph.
-        rail_fired, rail_response = guard(q)
+        # Gate: run guardrails asynchronously so blocked requests never run the graph.
+        rail_fired, rail_response = await guard(q)
+
         if rail_fired:
             GUARDRAILS_BLOCKS_TOTAL.labels(blocked="true").inc()
             RAG_REQUESTS_TOTAL.labels(status="blocked").inc()
@@ -239,6 +246,15 @@ def query(
             }
 
         GUARDRAILS_BLOCKS_TOTAL.labels(blocked="false").inc()
+
+        # Cache Lookup: Instant response (<5ms) for identical/similar questions
+        cached_res = get_cached_response(q)
+        if cached_res:
+            RAG_REQUESTS_TOTAL.labels(status="cached").inc()
+            RAG_REQUEST_DURATION.observe(time.perf_counter() - start)
+            logfire.info("⚡ Served response from Redis query cache", request_id=request_id, query=q)
+            cached_res["cached"] = True
+            return cached_res
 
         try:
             rag_agent = app.state.rag_agent
@@ -259,13 +275,18 @@ def query(
                 request_id=request_id,
                 thread_id=thread_id,
             )
-            return {
+            response_payload = {
                 "question": q,
                 "answer": final_output.get("final_answer"),
                 "thought_process": final_output.get("plan"),
                 "status": final_output.get("status"),
                 "sources": final_output.get("documents", []),
+                "cached": False,
             }
+            if response_payload.get("answer"):
+                set_cached_response(q, response_payload, ttl_seconds=3600)
+
+            return response_payload
         except Exception as e:
             RAG_REQUESTS_TOTAL.labels(status="error").inc()
             RAG_REQUEST_DURATION.observe(time.perf_counter() - start)

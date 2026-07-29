@@ -36,6 +36,7 @@ PROCESSED_DATA_DIR = "processed_data"
 qdrant_client = QdrantClient(
     url=settings.QDRANT_URL,
     api_key=settings.QDRANT_API_KEY,
+    timeout=60,
 )
 
 
@@ -175,7 +176,13 @@ if __name__ == "__main__":
     explicit_type = clean_args[2] if len(clean_args) > 2 else None
 
     if not os.path.exists(target_dir):
-        print(f"Error: path '{target_dir}' does not exist.")
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        candidate = os.path.join(project_root, target_dir)
+        if os.path.exists(candidate):
+            target_dir = candidate
+
+    if not os.path.exists(target_dir):
+        print(f"Error: path '{target_dir}' does not exist in working directory '{os.getcwd()}'.")
         sys.exit(1)
 
     run_universal_ingestion(target_dir, explicit_source_type=explicit_type, wipe=wipe_requested)

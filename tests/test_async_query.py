@@ -21,10 +21,14 @@ def test_query_returns_direct_answer():
     # Ensure rag_agent exists on app.state before TestClient uses it.
     app.state.rag_agent = mock_agent
 
+    from app.config import settings
+
+    headers = {"Authorization": f"Bearer {settings.API_KEY}"} if settings.API_KEY else {}
+
     client = TestClient(app)
     with patch("app.main.guard") as mock_guard:
         mock_guard.return_value = (False, "")
-        response = client.post("/query", json={"q": "hi", "thread_id": "t1"})
+        response = client.post("/query", json={"q": "hi", "thread_id": "t1"}, headers=headers)
 
     assert response.status_code == 200
     data = response.json()
@@ -36,10 +40,13 @@ def test_query_returns_direct_answer():
 
 def test_query_blocks_guardrails():
     """/query should return a blocked response when guardrails fire."""
+    from app.config import settings
+
+    headers = {"Authorization": f"Bearer {settings.API_KEY}"} if settings.API_KEY else {}
     client = TestClient(app)
     with patch("app.main.guard") as mock_guard:
         mock_guard.return_value = (True, "Blocked message")
-        response = client.post("/query", json={"q": "bad prompt", "thread_id": "t2"})
+        response = client.post("/query", json={"q": "bad prompt", "thread_id": "t2"}, headers=headers)
 
     assert response.status_code == 200
     data = response.json()

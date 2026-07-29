@@ -16,18 +16,17 @@ services:
     ports:
       - "8000:8080"
     environment:
-      # By default the app reads QDRANT_URL / QDRANT_API_KEY from the .env file.
-      # Set these explicitly here only when you want to override the .env values
-      # (e.g. to point at the local qdrant service above).
-      QDRANT_COLLECTION: enterprise_rag
-      RATE_LIMIT_PER_MINUTE: "60"
-      RAG_API_KEY: ""
+      # Non-sensitive configuration defaults.
+      # Secrets (RAG_API_KEY, tokens, database URIs) are loaded dynamically from .env or host env.
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-enterprise_rag}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      RAG_API_KEY: ${RAG_API_KEY}
       LOGFIRE_IGNORE_NO_CONFIG: "1"
     env_file:
       - .env
     depends_on:
       - qdrant
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080" ]
 
   ui:
     build:
@@ -44,7 +43,7 @@ services:
       - ./ui:/app/ui:ro
     depends_on:
       - api
-    command: ["streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    command: [ "streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.address", "0.0.0.0" ]
 
 volumes:
   qdrant-data:
