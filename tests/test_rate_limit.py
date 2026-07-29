@@ -19,10 +19,11 @@ def test_rate_limit_blocks_excessive_requests():
         app.state.limiter = Limiter(key_func=get_remote_address)
 
         client = TestClient(app)
+        headers = {"Authorization": f"Bearer {settings.API_KEY}"} if settings.API_KEY else {}
         with patch("app.main.guard") as mock_guard:
             mock_guard.return_value = (True, "blocked")
-            response1 = client.post("/query", json={"q": "hi"})
-            response2 = client.post("/query", json={"q": "hi again"})
+            response1 = client.post("/query", json={"q": "hi"}, headers=headers)
+            response2 = client.post("/query", json={"q": "hi again"}, headers=headers)
 
         assert response1.status_code == 200
         assert response2.status_code == 429

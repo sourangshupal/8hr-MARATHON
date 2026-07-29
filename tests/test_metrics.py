@@ -11,10 +11,14 @@ def test_metrics_endpoint_exposes_rag_counters():
     """Calling /query should increment metrics visible on /metrics."""
     client = TestClient(app)
 
+    from app.config import settings
+
+    headers = {"Authorization": f"Bearer {settings.API_KEY}"} if settings.API_KEY else {}
+
     # Make a blocked /query request so no real Celery backend is needed.
     with patch("app.main.guard") as mock_guard:
         mock_guard.return_value = (True, "blocked")
-        response = client.post("/query", json={"q": "test"})
+        response = client.post("/query", json={"q": "test"}, headers=headers)
     assert response.status_code == 200
 
     metrics_resp = client.get("/metrics")
